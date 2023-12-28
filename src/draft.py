@@ -27,7 +27,7 @@ logging.getLogger("httpx").setLevel(logging.WARNING)
 logger = logging.getLogger(__name__)
 
 # get token using BotFather
-TOKEN = os.getenv("TG_TOKEN")
+TOKEN = os.getenv("TIC_TAC_TOE_TOKEN_TG")  # I put it in zsh config
 
 CONTINUE_GAME, FINISH_GAME = range(2)
 
@@ -66,11 +66,43 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
 async def game(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Main processing of the game"""
     # PLACE YOUR CODE HERE
+    upd = update.callback_query.data
+    r, c = int(upd[0]), int(upd[1])
+    # print(r, c)
+    context.user_data["keyboard_state"][r][c] = CROSS
+    keyboard = generate_keyboard(context.user_data["keyboard_state"])
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    query = update.callback_query
+
+    if won(context.user_data["keyboard_state"]):
+        # print("yay finish")
+        # print(context.user_data["keyboard_state"])
+        text = "YOU WON"
+        await context.bot.edit_message_text(
+            chat_id=query.message.chat_id,
+            message_id=query.message.message_id,
+            text=text,
+            reply_markup=reply_markup,
+        )
+
+        return FINISH_GAME
+    await context.bot.edit_message_text(
+        chat_id=query.message.chat_id,
+        message_id=query.message.message_id,
+        text="Someones turn",
+        reply_markup=reply_markup,
+    )
+
+    return CONTINUE_GAME
 
 
-def won(fields: list[str]) -> bool:
-    """Check if crosses or zeros have won the game"""
-    # PLACE YOUR CODE HERE
+# def won(fields: list[str]) -> bool:
+#     """Check if crosses or zeros have won the game"""
+#     # PLACE YOUR CODE HERE
+def won(fields):
+    if all([i == CROSS for i in fields[0]]):
+        return True
+    return False
 
 
 async def end(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:

@@ -3,5 +3,6 @@
     "**/*.egg-info": true,
     "**/__pycache__": true,
     "**/__pycache__.*": true
-  }
+  },
+  "python.analysis.typeCheckingMode": "off"
 }
