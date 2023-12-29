@@ -2,8 +2,10 @@
   "files.exclude": {
     "**/*.egg-info": true,
     "**/__pycache__": true,
-    "**/__pycache__.*": true
+    "**/__pycache__.*": true,
+    "**/.pytest_cache": true,
+    "**/.pytest_cache.*": true
   },
-  "python.analysis.typeCheckingMode": "off",
+  "python.analysis.typeCheckingMode": "basic",
   "python.analysis.autoImportCompletions": true
 }

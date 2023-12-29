@@ -3,6 +3,7 @@
 """
 Bot for playing tic tac toe game with multiple CallbackQueryHandlers.
 """
+import asyncio
 from copy import deepcopy
 import logging
 from typing import Optional, Union
@@ -39,7 +40,7 @@ logger = logging.getLogger(__name__)
 # get token using BotFather
 TOKEN = os.getenv("TIC_TAC_TOE_TOKEN_TG")  # I put it in zsh config
 
-CONTINUE_GAME, FINISH_GAME = range(2)
+PLAYERS_TURN, OPPONENTS_TURN = range(2)
 
 FREE_SPACE = "."
 CROSS = "X"
@@ -71,7 +72,49 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     await update.message.reply_text(
         f"X (your) turn! Please, put X to the free place", reply_markup=reply_markup
     )
-    return CONTINUE_GAME
+    return PLAYERS_TURN
+
+
+async def move_judge(
+    step: tuple[int, int],
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE,
+    mark: str,
+) -> int:
+    """Checks if it is legal move, if so - registers it and returns new state
+    Might throw an error
+    And end the game
+    Useful for user, opponent, bot. Is it??? Because opponent will be user itself.
+    """
+    grid = context.user_data["keyboard_state"]
+    context.user_data["steps_played"] += 1
+    r, c = step
+    if not any([j == FREE_SPACE for i in grid for j in i]):
+        return True, True
+    if grid[r][c] == FREE_SPACE:
+        is_valid = True
+        is_end = False
+        grid[r][c] = mark
+
+    # if won(grid): # print something nice
+    #     return True, True
+
+    # if draw return not valid
+    return is_valid, is_end
+
+
+async def bot_turn(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    grid = context.user_data["keyboard_state"]
+    step = bot_response(grid)
+    # write text that machine is thinking
+    await asyncio.sleep(0.5)
+    # write text that it is your turn with actual move
+    is_valid, is_end = await move_judge(step, update, context, ZERO)
+    # while not is_valid: make move? I think just throw an error
+    if is_end:
+        return await end(update, context)
+    return PLAYERS_TURN
+    # return PLAYERS_TURN
 
 
 def bot_response(grid):
@@ -95,13 +138,13 @@ async def game(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     context.user_data["keyboard_state"][r][c] = CROSS
     context.user_data["steps_played"] += 1
     if context.user_data["steps_played"] == 9:
-        return FINISH_GAME
+        return OPPONENTS_TURN
     r, c = bot_response(context.user_data["keyboard_state"])
     context.user_data["keyboard_state"][r][c] = ZERO
     context.user_data["steps_played"] += 1
 
     if context.user_data["steps_played"] == 9:
-        return FINISH_GAME
+        return OPPONENTS_TURN
     keyboard = generate_keyboard(context.user_data["keyboard_state"])
     reply_markup = InlineKeyboardMarkup(keyboard)
     query = update.callback_query
@@ -110,14 +153,12 @@ async def game(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
         # print("yay finish")
         # print(context.user_data["keyboard_state"])
         text = "YOU WON"
-        await context.bot.edit_message_text(
-            chat_id=query.message.chat_id,
-            message_id=query.message.message_id,
-            text=text,
-            reply_markup=reply_markup,
-        )
+        # TODO: add here game map and next instructions using emoji
+        query = update.callback_query
+        await query.answer()
+        await query.edit_message_text(text=text)
 
-        return FINISH_GAME
+        return ConversationHandler.END
     await context.bot.edit_message_text(
         chat_id=query.message.chat_id,
         message_id=query.message.message_id,
@@ -125,7 +166,7 @@ async def game(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
         reply_markup=reply_markup,
     )
 
-    return CONTINUE_GAME
+    return PLAYERS_TURN
 
 
 # def won(fields: list[str]) -> bool:
@@ -145,8 +186,9 @@ async def end(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     # context.user_data["keyboard_state"] = get_default_state()
 
     # make it work, remove keyboard if someone is won
-    # query = update.callback_query
-    # await context.bot.edit_message_text(message_id=query.message.message_id, text="Bye")
+    query = update.callback_query
+    await query.answer()
+    await query.edit_message_text(text="Bye")
     return ConversationHandler.END
 
 
@@ -166,7 +208,7 @@ async def inplay_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     )
 
 
-class HandlerOnFinish(BaseHandler):
+class HandlerOpponent(BaseHandler):
     # https://docs.python-telegram-bot.org/en/v20.7/telegram.ext.basehandler.html
     def check_update(self, update: object) -> bool | object | None:
         return True
@@ -189,14 +231,14 @@ def main() -> None:
             MessageHandler(filters.ALL, first_message),
         ],
         states={
-            CONTINUE_GAME: [
+            PLAYERS_TURN: [
                 CallbackQueryHandler(game, pattern="^" + f"{r}{c}" + "$")
                 for r in range(3)
                 for c in range(3)
             ],
-            # why do we need callback here if it is the end and no input is expected?
-            FINISH_GAME: [
-                HandlerOnFinish(end)
+            # Aren't used for now, maybe will be with multiplayer
+            OPPONENTS_TURN: [
+                # HandlerOnFinish(end)
                 # CallbackQueryHandler(end, pattern="^" + f"{r}{c}" + "$")
                 # for r in range(3)
                 # for c in range(3)

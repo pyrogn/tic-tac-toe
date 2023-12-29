@@ -12,6 +12,15 @@ requires-python = ">=3.12"
 readme = "README.md"
 license = {text = "MIT"}
 
+[project.optional-dependencies]
+test = [
+    "pytest>=7.4.3",
+]
+lint = [
+    "pre-commit>=3.6.0",
+    "black>=23.12.1",
+    "ruff>=0.1.9",
+]
 [build-system]
 requires = ["setuptools>=61", "wheel"]
 build-backend = "setuptools.build_meta"
