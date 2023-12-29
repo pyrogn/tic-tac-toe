@@ -4,5 +4,6 @@
     "**/__pycache__": true,
     "**/__pycache__.*": true
   },
-  "python.analysis.typeCheckingMode": "off"
+  "python.analysis.typeCheckingMode": "off",
+  "python.analysis.autoImportCompletions": true
 }

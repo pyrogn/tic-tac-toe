@@ -5,17 +5,27 @@ Bot for playing tic tac toe game with multiple CallbackQueryHandlers.
 """
 from copy import deepcopy
 import logging
+from typing import Optional, Union
+import random
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import (
     Application,
     CallbackQueryHandler,
     CommandHandler,
+    MessageHandler,
     ContextTypes,
+    BaseHandler,
     ConversationHandler,
+    filters,
 )
 import os
+from warnings import filterwarnings
+from telegram.warnings import PTBUserWarning
 
+filterwarnings(
+    action="ignore", message=r".*CallbackQueryHandler", category=PTBUserWarning
+)
 
 # Enable logging
 logging.basicConfig(
@@ -57,10 +67,23 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     context.user_data["keyboard_state"] = get_default_state()
     keyboard = generate_keyboard(context.user_data["keyboard_state"])
     reply_markup = InlineKeyboardMarkup(keyboard)
+    context.user_data["steps_played"] = 0
     await update.message.reply_text(
         f"X (your) turn! Please, put X to the free place", reply_markup=reply_markup
     )
     return CONTINUE_GAME
+
+
+def bot_response(grid):
+    available_moves = []
+    for i in range(3):
+        for j in range(3):
+            if grid[i][j] == FREE_SPACE:
+                available_moves.append((i, j))
+    if not available_moves:
+        raise ValueError("no available moves for a bot")
+    selected_idx = random.randint(0, len(available_moves) - 1)
+    return available_moves[selected_idx]
 
 
 async def game(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -70,6 +93,15 @@ async def game(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     r, c = int(upd[0]), int(upd[1])
     # print(r, c)
     context.user_data["keyboard_state"][r][c] = CROSS
+    context.user_data["steps_played"] += 1
+    if context.user_data["steps_played"] == 9:
+        return FINISH_GAME
+    r, c = bot_response(context.user_data["keyboard_state"])
+    context.user_data["keyboard_state"][r][c] = ZERO
+    context.user_data["steps_played"] += 1
+
+    if context.user_data["steps_played"] == 9:
+        return FINISH_GAME
     keyboard = generate_keyboard(context.user_data["keyboard_state"])
     reply_markup = InlineKeyboardMarkup(keyboard)
     query = update.callback_query
@@ -110,8 +142,34 @@ async def end(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     ConversationHandler that the conversation is over.
     """
     # reset state to default so you can play again with /start
-    context.user_data["keyboard_state"] = get_default_state()
+    # context.user_data["keyboard_state"] = get_default_state()
+
+    # make it work, remove keyboard if someone is won
+    # query = update.callback_query
+    # await context.bot.edit_message_text(message_id=query.message.message_id, text="Bye")
     return ConversationHandler.END
+
+
+async def first_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Send message on `/start`."""
+    await context.bot.send_message(
+        context._chat_id,
+        text='If you want to play, just type "/start" command',
+    )
+
+
+async def inplay_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    await context.bot.send_message(
+        context._chat_id,
+        text="You have an active game, if dont want to continue, type some command."
+        "Or start to play again",
+    )
+
+
+class HandlerOnFinish(BaseHandler):
+    # https://docs.python-telegram-bot.org/en/v20.7/telegram.ext.basehandler.html
+    def check_update(self, update: object) -> bool | object | None:
+        return True
 
 
 def main() -> None:
@@ -126,20 +184,29 @@ def main() -> None:
     # $ means "end of line/string"
     # So ^ABC$ will only allow 'ABC'
     conv_handler = ConversationHandler(
-        entry_points=[CommandHandler("start", start)],
+        entry_points=[
+            CommandHandler("start", start),
+            MessageHandler(filters.ALL, first_message),
+        ],
         states={
             CONTINUE_GAME: [
                 CallbackQueryHandler(game, pattern="^" + f"{r}{c}" + "$")
                 for r in range(3)
                 for c in range(3)
             ],
+            # why do we need callback here if it is the end and no input is expected?
             FINISH_GAME: [
-                CallbackQueryHandler(end, pattern="^" + f"{r}{c}" + "$")
-                for r in range(3)
-                for c in range(3)
+                HandlerOnFinish(end)
+                # CallbackQueryHandler(end, pattern="^" + f"{r}{c}" + "$")
+                # for r in range(3)
+                # for c in range(3)
             ],
         },
-        fallbacks=[CommandHandler("start", start)],
+        fallbacks=[
+            CommandHandler("start", start),
+            MessageHandler(filters.ALL, inplay_message),
+        ],
+        per_message=False,
     )
 
     # Add ConversationHandler to application that will be used for handling updates
