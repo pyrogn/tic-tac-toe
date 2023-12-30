@@ -61,7 +61,7 @@ logger = logging.getLogger(__name__)
 TOKEN = os.getenv("TIC_TAC_TOE_TOKEN_TG")  # I put it in zsh config
 assert TOKEN, "Token not found in env vars"
 
-PLAYERS_TURN, OPPONENTS_TURN = range(2)
+CONTINUE_GAME, OPPONENTS_TURN = range(2)
 
 FREE_SPACE = "."
 CROSS = "X"
@@ -69,6 +69,10 @@ ZERO = "O"
 
 
 DEFAULT_STATE = [[FREE_SPACE for _ in range(3)] for _ in range(3)]
+
+
+def wide_message(msg):
+    return f"{msg:_<70}"
 
 
 def generate_keyboard(state: Grid) -> list[list[InlineKeyboardButton]]:
@@ -84,41 +88,57 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     # assert context.user_data
     assert update.message
 
+    user = update.message.from_user
+    context.user_data["game"] = f"{user.username}-bot"
+    logger.info(
+        f"Player {user.first_name or ''} {user.last_name or ''} "
+        f"(@{user.username}) has joined"
+    )
+
     context.user_data["keyboard_state"] = get_default_state()
     keyboard = generate_keyboard(context.user_data["keyboard_state"])
     reply_markup = InlineKeyboardMarkup(keyboard)
+    # they should be shared only inside current game, not between all players
     context.user_data["GameConductor"] = GameConductor()
     context.user_data["handle1"] = context.user_data["GameConductor"].get_handler(CROSS)
     context.user_data["handle2"] = context.user_data["GameConductor"].get_handler(ZERO)
+
     await update.message.reply_text(
-        f"X (your) turn! Please, put X to the free place", reply_markup=reply_markup
+        wide_message("X (your) turn! Please, put X to the free place"),
+        reply_markup=reply_markup,
     )
-    return PLAYERS_TURN
+    logger.info(f"game {context.user_data["game"]} has begun, keyboard rendered")
+    return CONTINUE_GAME
 
 
 async def bot_turn(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     query = update.callback_query
-    grid = context.user_data["keyboard_state"]
     gc = context.user_data["GameConductor"]
+    grid = gc.grid
     move = random_available_move(grid)
+    logger.info(f"bot chose move {move}")
 
     assert is_move_legal(grid, move), "Bot move is illegal"
 
     handle = context.user_data["handle2"]
     handle(move)
-    # print(move)
+    logger.info(f"bot made move {move}")
 
     # write text that machine is thinking
-    await asyncio.sleep(0.5)
+    sec_sleep = random.randint(1, 5) / 10
+    await asyncio.sleep(sec_sleep)
     # write text that it is your turn with actual move
     # while not is_valid: make move? I think just throw an error
     keyboard = generate_keyboard(gc.grid)
     reply_markup = InlineKeyboardMarkup(keyboard)
-    await query.edit_message_text(reply_markup=reply_markup, text="Player's turn")
+    await query.edit_message_text(
+        reply_markup=reply_markup, text=wide_message("Player's turn")
+    )
+    logger.info(f"bot made move {move}, message rendered")
     gc: GameConductor = context.user_data["GameConductor"]
     if gc.is_game_over:
         return await end(update, context)
-    return PLAYERS_TURN
+    return CONTINUE_GAME
 
 
 async def game(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -132,22 +152,32 @@ async def game(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
 
     grid = context.user_data["keyboard_state"]
     move = int(coords_keyboard[0]), int(coords_keyboard[1])
+    logger.info(f"player chose move {move}")
 
     if not is_move_legal(grid, move):
-        return PLAYERS_TURN
+        logger.info(f"move {move} from player is illegal")
+        return CONTINUE_GAME
 
     handle = context.user_data["handle1"]
+    if not handle.is_my_turn:
+        logger.info(f"Player attempted to make a move not in his time")
+
+
     handle(move)
+    logger.info(f"Player made move {move}")
 
     gc: GameConductor = context.user_data["GameConductor"]
     keyboard = generate_keyboard(gc.grid)
     reply_markup = InlineKeyboardMarkup(keyboard)
-    await query.edit_message_text(reply_markup=reply_markup, text="Opponent's turn")
+    await query.edit_message_text(
+        reply_markup=reply_markup, text=wide_message("Opponent's turn")
+    )
+    logger.info(f"Player made move {move}, message rendered")
 
     if gc.is_game_over:
         return await end(update, context)
     return await bot_turn(update, context)
-    return OPPONENTS_TURN
+    # return OPPONENTS_TURN
 
 
 async def end(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -158,6 +188,8 @@ async def end(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     # context.user_data["keyboard_state"] = get_default_state()
 
     # make it work, remove keyboard if someone is won
+    game_name = context.user_data['game']
+    logger.info(f"{game_name} has ended")
     query = update.callback_query
     assert query, "Query is None. Message was deleted?"
 
@@ -166,6 +198,7 @@ async def end(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     text = f"Winner in this game: {winner}. Thanks for playing"
     await query.answer()
     await query.edit_message_text(text=text)
+    logger.info(f"{game_name} has ended, message rendered. winner: {winner}")
     return ConversationHandler.END
 
 
@@ -183,13 +216,13 @@ async def inplay_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         text="You have an active game, if dont want to continue, type some command."
         "Or start to play again",
     )
-    return PLAYERS_TURN
+    return CONTINUE_GAME
 
 
-class HandlerOpponent(BaseHandler):
-    # https://docs.python-telegram-bot.org/en/v20.7/telegram.ext.basehandler.html
-    def check_update(self, update: object) -> bool | object | None:
-        return True
+# class HandlerOpponent(BaseHandler):
+#     # https://docs.python-telegram-bot.org/en/v20.7/telegram.ext.basehandler.html
+#     def check_update(self, update: object) -> bool | object | None:
+#         return True
 
 
 def main() -> None:
@@ -209,18 +242,19 @@ def main() -> None:
             MessageHandler(filters.ALL, first_message),
         ],
         states={
-            PLAYERS_TURN: [
+            CONTINUE_GAME: [
                 CallbackQueryHandler(game, pattern="^" + f"{r}{c}" + "$")
                 for r in range(3)
                 for c in range(3)
             ],
+            # add state with options: want to play again?
             # Aren't used for now, maybe will be with multiplayer
-            OPPONENTS_TURN: [
-                HandlerOpponent(bot_turn)
-                # CallbackQueryHandler(end, pattern="^" + f"{r}{c}" + "$")
-                # for r in range(3)
-                # for c in range(3)
-            ],
+            # OPPONENTS_TURN: [
+            #     HandlerOpponent(bot_turn)
+            # CallbackQueryHandler(end, pattern="^" + f"{r}{c}" + "$")
+            # for r in range(3)
+            # for c in range(3)
+            # ],
         },
         fallbacks=[
             CommandHandler("start", start),
