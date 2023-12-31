@@ -17,6 +17,7 @@ from tic_tac_toe.game import (
     FREE_SPACE,
     CROSS,
     ZERO,
+    render_grid,
     select_cell,
     n_empty_cells,
     is_game_over,
@@ -61,18 +62,14 @@ logger = logging.getLogger(__name__)
 TOKEN = os.getenv("TIC_TAC_TOE_TOKEN_TG")  # I put it in zsh config
 assert TOKEN, "Token not found in env vars"
 
-CONTINUE_GAME, OPPONENTS_TURN = range(2)
-
-FREE_SPACE = "."
-CROSS = "X"
-ZERO = "O"
+CONTINUE_GAME, END_STATE = range(2)
 
 
 DEFAULT_STATE = [[FREE_SPACE for _ in range(3)] for _ in range(3)]
 
 
 def wide_message(msg):
-    return f"{msg:_<70}"
+    return f"{msg:_<50}"
 
 
 def generate_keyboard(state: Grid) -> list[list[InlineKeyboardButton]]:
@@ -98,7 +95,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     context.user_data["keyboard_state"] = get_default_state()
     keyboard = generate_keyboard(context.user_data["keyboard_state"])
     reply_markup = InlineKeyboardMarkup(keyboard)
-    # they should be shared only inside current game, not between all players
+
     context.user_data["GameConductor"] = GameConductor()
     context.user_data["handle1"] = context.user_data["GameConductor"].get_handler(CROSS)
     context.user_data["handle2"] = context.user_data["GameConductor"].get_handler(ZERO)
@@ -146,7 +143,6 @@ async def game(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     # PLACE YOUR CODE HERE
     query = update.callback_query
     assert query, "query is None, not good..."
-    # coords_keyboard = await query.answer()
     coords_keyboard = query.data
     assert coords_keyboard
 
@@ -156,11 +152,13 @@ async def game(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
 
     if not is_move_legal(grid, move):
         logger.info(f"move {move} from player is illegal")
+        # edit text to warn user or show pop up
         return CONTINUE_GAME
 
     handle = context.user_data["handle1"]
     if not handle.is_my_turn:
         logger.info(f"Player attempted to make a move not in his time")
+        return CONTINUE_GAME
 
 
     handle(move)
@@ -195,7 +193,8 @@ async def end(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
 
     gc: GameConductor = context.user_data["GameConductor"]
     winner = gc.result or "Draw"
-    text = f"Winner in this game: {winner}. Thanks for playing"
+    rendered_grid = render_grid(gc.grid)
+    text = rendered_grid + f"\nWinner in this game: {winner}.\nThanks for playing"
     await query.answer()
     await query.edit_message_text(text=text)
     logger.info(f"{game_name} has ended, message rendered. winner: {winner}")
@@ -249,12 +248,12 @@ def main() -> None:
             ],
             # add state with options: want to play again?
             # Aren't used for now, maybe will be with multiplayer
-            # OPPONENTS_TURN: [
+            END_STATE: [
             #     HandlerOpponent(bot_turn)
             # CallbackQueryHandler(end, pattern="^" + f"{r}{c}" + "$")
             # for r in range(3)
             # for c in range(3)
-            # ],
+            ],
         },
         fallbacks=[
             CommandHandler("start", start),

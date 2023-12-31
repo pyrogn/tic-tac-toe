@@ -71,7 +71,7 @@ def get_winner(grid: Grid) -> str | None:
         if all([grid[i][2 - i] == mark for i in range(3)]):  # right diagonal
             winner.add(mark)
     if len(winner) == 0:
-        return None
+        return None  # draw or game is not over
     if len(winner) > 1:
         raise ValueError("Two winners, this is nonsense")
     return list(winner)[0]
@@ -103,16 +103,17 @@ class GameConductor:
     def __init__(self):
         self.grid = get_default_state()
         self._available_marks = {CROSS, ZERO}
-        self.current_move = CROSS
+        self.current_move = CROSS  # first move
         self.is_game_over = False
-        # self.is_my_turn: Callable[[], bool]
 
     def get_handler(self, mark: str | None = None, what_is_left: bool = False):
         """You just call returned function with coordinates"""
         if mark and mark not in (CROSS, ZERO):
             raise ValueError(f"This mark {mark} is unknown")
 
-        if not mark or what_is_left:
+        if what_is_left and len(self._available_marks) == 2:
+            mark = CROSS
+        elif not mark or what_is_left:
             mark = list(self._available_marks)[0]
 
         try:
@@ -122,8 +123,9 @@ class GameConductor:
 
         handler = partial(self.move_handler, mark=mark)
 
-        # full dynamism
+        # full dynamism (most importantly, legal!)
         handler.is_my_turn = lambda: self.current_move == mark  # type: ignore
+        handler.mark = mark  # type: ignore
 
         return handler
 
@@ -147,3 +149,15 @@ class GameConductor:
         if is_game_over(self.grid):
             self.is_game_over = True
         self.current_move = list({CROSS, ZERO} - {mark})[0]  # now another player's turn
+
+
+def get_opposite_mark(mark: str) -> str:
+    if mark not in (CROSS, ZERO):
+        raise ValueError(mark + " not in marks")
+    return list({CROSS, ZERO} - {mark})[0]
+
+
+def render_grid(grid: Grid) -> str:
+    # It changes rows and columns!!! TODO: think about it!!!
+    # print(grid)
+    return "\n".join(["".join(row) for row in grid]).replace(".", "_")

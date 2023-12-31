@@ -9,6 +9,8 @@ from tic_tac_toe.game import (
     FREE_SPACE,
     CROSS,
     ZERO,
+    get_opposite_mark,
+    render_grid,
     select_cell,
     n_empty_cells,
     is_game_over,
@@ -153,3 +155,24 @@ def test_game_conductor1():
     assert gc.result == CROSS
     with pytest.raises(ValueError, match=r".*Game has ended, no more moves.*"):
         handle2((2, 2))
+
+
+# it is kind of broken, see function definition
+def test_render_grid(grid1):
+    rendered_grid = """_XO\nX_O\n_X_"""
+    assert render_grid(grid1) == rendered_grid
+
+
+def test_opposite_mark():
+    assert get_opposite_mark(CROSS) == ZERO
+    assert get_opposite_mark(ZERO) == CROSS
+    with pytest.raises(ValueError):
+        get_opposite_mark("some bogus mark")
+
+
+def test_get_mark():
+    gc = GameConductor()
+    handle1 = gc.get_handler(CROSS, what_is_left=True)
+    handle2 = gc.get_handler(CROSS, what_is_left=True)
+    assert handle1.is_my_turn() == True  # type: ignore
+    assert handle2.is_my_turn() == False  # type: ignore
