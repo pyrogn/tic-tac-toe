@@ -100,16 +100,24 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     context.user_data["handle1"] = context.user_data["GameConductor"].get_handler(CROSS)
     context.user_data["handle2"] = context.user_data["GameConductor"].get_handler(ZERO)
 
-    await update.message.reply_text(
+    message = await update.message.reply_text(
         wide_message("X (your) turn! Please, put X to the free place"),
         reply_markup=reply_markup,
     )
-    logger.info(f"game {context.user_data["game"]} has begun, keyboard rendered")
+    # print(message)
+    # print(message.message_id, message.chat_id)
+    # await context.bot.edit_message_text(
+    #     text="hello there",
+    #     message_id=message.message_id,
+    #     chat_id=111750353,
+    # )
+    logger.info(f"game {context.user_data['game']} has begun, keyboard rendered")
     return CONTINUE_GAME
 
 
 async def bot_turn(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     query = update.callback_query
+    # print(update.callback_query)
     gc = context.user_data["GameConductor"]
     grid = gc.grid
     move = random_available_move(grid)
@@ -160,7 +168,6 @@ async def game(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
         logger.info(f"Player attempted to make a move not in his time")
         return CONTINUE_GAME
 
-
     handle(move)
     logger.info(f"Player made move {move}")
 
@@ -186,7 +193,7 @@ async def end(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     # context.user_data["keyboard_state"] = get_default_state()
 
     # make it work, remove keyboard if someone is won
-    game_name = context.user_data['game']
+    game_name = context.user_data["game"]
     logger.info(f"{game_name} has ended")
     query = update.callback_query
     assert query, "Query is None. Message was deleted?"
@@ -249,10 +256,10 @@ def main() -> None:
             # add state with options: want to play again?
             # Aren't used for now, maybe will be with multiplayer
             END_STATE: [
-            #     HandlerOpponent(bot_turn)
-            # CallbackQueryHandler(end, pattern="^" + f"{r}{c}" + "$")
-            # for r in range(3)
-            # for c in range(3)
+                #     HandlerOpponent(bot_turn)
+                # CallbackQueryHandler(end, pattern="^" + f"{r}{c}" + "$")
+                # for r in range(3)
+                # for c in range(3)
             ],
         },
         fallbacks=[

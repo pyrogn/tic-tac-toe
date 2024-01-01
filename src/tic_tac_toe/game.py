@@ -111,6 +111,7 @@ class GameConductor:
         if mark and mark not in (CROSS, ZERO):
             raise ValueError(f"This mark {mark} is unknown")
 
+        # some logic is still unclear
         if what_is_left and len(self._available_marks) == 2:
             mark = CROSS
         elif not mark or what_is_left:

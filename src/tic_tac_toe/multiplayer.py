@@ -1,4 +1,6 @@
-from typing import Literal, NamedTuple
+from collections import deque
+from queue import Queue
+from typing import Any, Literal, NamedTuple
 from tic_tac_toe.game import (
     DEFAULT_STATE,
     get_default_state,
@@ -22,8 +24,35 @@ from tic_tac_toe.game import (
 import asyncio
 
 
-class Player(NamedTuple):
+MessageId = int
+ChatId = int
+
+
+class Player(NamedTuple):  # use when you enable mark preferences
     mark: str
+
+
+class ChatPlayerInfo(NamedTuple):
+    handle: Any  # maybe replace with Protocol (nice idea)
+    message_id: MessageId
+
+
+def get_player_info(chat_info_dict, chat_id):
+    # handle = game_data.chat_dict[chat_id].handle
+    # my_message_id = game_data.chat_dict[chat_id].message_id
+    other_chat_id = int(list(set(chat_info_dict.keys()) - {chat_id})[0])
+    # opponents_message_id = game_data.chat_dict[other_chat_id].message_id
+    return (
+        (*chat_info_dict[chat_id], chat_id),
+        (*chat_info_dict[other_chat_id], other_chat_id),
+    )
+
+
+class Game(NamedTuple):
+    """1 is X, 2 is O I guess (bad design)"""
+
+    chat_dict: dict[ChatId, ChatPlayerInfo]
+    game_conductor: GameConductor
 
 
 # Add logging??? It should be necessary for debug
@@ -31,52 +60,31 @@ class Multiplayer:
     """Connects two players and gives handle with shared resources"""
 
     def __init__(self) -> None:
-        # self.players_queue = list()  # should be actual queue
-        # self.games = list()  # it could be memory leak
-        self.is_player_waiting = False
+        self.players_queue = Queue()  # should be actual queue
         self.waiting_handle = None
 
-    def register_player(self) -> "HandleForPlayer":
-        if not self.waiting_handle:
-            handle1, handle2 = self.init_handles()
-            self.waiting_handle = handle2
-            return handle1
-        handle2 = self.waiting_handle
-        self.waiting_handle = None
-        return handle2
+    @property
+    def is_player_waiting(self):
+        if self.players_queue.qsize() > 2:
+            raise ValueError("Too many players waiting game, tinder somebody please")
+        return self.players_queue != 0
 
-    def init_handles(self):
-        queue_p1 = list()
-        queue_p2 = list()
-        handle1 = HandleForPlayer(queue_p1, queue_p2)
-        handle2 = HandleForPlayer(queue_p2, queue_p1)
-        handle1.n = 0
-        handle2.n = 1
-        return handle1, handle2
+    def register_player(self, chat_id: ChatId, message_id: MessageId):
+        self.players_queue.put((chat_id, message_id))
 
-
-class HandleForPlayer:
-    """Pass information between two players
-
-    Rules:
-        In progress...
-        Does not have knowledge about a game, only passing moves
-    """
-
-    # Add handle to make sure you don't pop value just pushed before
-
-    def __init__(self, players_queue: list, opponents_queue: list):
-        self.players_queue = players_queue
-        self.opponents_queue = opponents_queue
-        self.n: int
-
-    def push_value(self, value):
-        self.opponents_queue.append(value)
-        assert len(self.opponents_queue) == 1
-
-    async def pop_value(self):  # can it stop at ctrl+c?
-        while True:  # can I make a Task?
-            if not self.players_queue:
-                await asyncio.sleep(0.1)
-            else:
-                return self.players_queue.pop()
+    def get_pair(self) -> Game:
+        if (self.players_queue.qsize()) < 2:
+            raise ValueError("Not enough players")
+        player1 = self.players_queue.get_nowait()
+        player2 = self.players_queue.get_nowait()
+        gc = GameConductor()
+        # change when need to use user mark preference
+        handle1 = gc.get_handler(CROSS, what_is_left=True)
+        handle2 = gc.get_handler(CROSS, what_is_left=True)
+        return Game(
+            {
+                player1[0]: ChatPlayerInfo(handle1, player1[1]),
+                player2[0]: ChatPlayerInfo(handle2, player2[1]),
+            },
+            gc,
+        )

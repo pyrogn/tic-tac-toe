@@ -13,12 +13,12 @@
 - [x] Understand why grid is smaller before any move (add fix it)
 - [x] Add bot logic
 - [ ] Understand `python-telegram-bot` architecture (`update`, `context`)
-- [ ] Add multiplayer
-- [ ] Refactor project
-- [ ] Make more interesting text
-- [ ] Add some description, annotations, docstrings
-- [ ] Linters
+- [x] Add multiplayer
+- [ ] Refactor project (single main script, readable code)
 - [ ] Make better exception hierarchy
+- [ ] Add some description, annotations, docstrings
+- [ ] Make more interesting text
+- [ ] Linters
 
 ## Ideas
 
