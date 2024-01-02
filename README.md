@@ -1,3 +1,5 @@
+[![pdm-managed](https://img.shields.io/badge/pdm-managed-blueviolet)](https://pdm-project.org)
+
 # tic-tac-toe
 
 [Telegram-bot](https://t.me/tictactoe48573bot) (unlikely to be online)

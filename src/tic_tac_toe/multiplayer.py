@@ -49,10 +49,8 @@ class GamePersonalized(NamedTuple):
     game_conductor: GameConductor
 
 
-# TODO: think what if the same player registers again with start?
-# will he play with himself?
 class Multiplayer:
-    """Connects two players and gives handle with shared resources"""
+    """Connects two players and other magic"""
 
     def __init__(self) -> None:
         self.players_queue: Queue[dict] = Queue()
@@ -61,14 +59,16 @@ class Multiplayer:
 
     @property
     def is_player_waiting(self):
-        if self.players_queue.qsize() > 2:
+        if self.players_queue.qsize() >= 2:
             raise ValueError("Too many players waiting game, tinder somebody please")
         return self.players_queue.qsize() != 0
 
     def register_player(self, **kwargs):
-        assert all(  # necessary keys to connect players
-            [key in kwargs for key in ("chat_id", "message_id")]
-        ), "Some info is missing"
+        # necessary keys to connect players
+        if not all([key in kwargs for key in ("chat_id", "message_id")]):
+            raise ValueError(
+                "chat_id and message_id are necessary keys for registration"
+            )
         if kwargs["chat_id"] in self.games:
             raise CurrentGameError
 
@@ -102,6 +102,7 @@ class Multiplayer:
         # return game  # do I even need to return?
 
     def get_game(self, chat_id: ChatId) -> GamePersonalized:
+        "Get personalized game by chat_id"
         return self._make_personalized_game(self.games[chat_id], chat_id)
 
     def remove_game(self, chat_id) -> None:

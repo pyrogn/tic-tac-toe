@@ -106,7 +106,6 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     logger.info(f"Player {user_name} has joined")
     chat_id = update.message.chat_id
     game = None
-    # TODO: if this player has active game, do something with it
 
     keyboard_state = get_default_state()
     keyboard = generate_keyboard(keyboard_state)
@@ -129,6 +128,10 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     except CurrentGameError:
         game = multiplayer.get_game(chat_id)
         # and report to user that current game is dropped
+        multiplayer.remove_game(chat_id)
+        multiplayer.register_player(
+            chat_id=chat_id, message_id=message_id, user_name=user_name
+        )
         await context.bot.edit_message_text(
             text=f"Your old game with {game.opponent.user_name} has been abandoned. Creating a new game",
             chat_id=game.myself.chat_id,
@@ -139,10 +142,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
             message_id=game.opponent.message_id,
             text=f"Your game was abandoned by: {game.myself.user_name}",
         )
-        multiplayer.remove_game(chat_id)
-        multiplayer.register_player(
-            chat_id=chat_id, message_id=message_id, user_name=user_name
-        )
+
     except WaitRoomError:
         # alert that you are already in the queue
         await context.bot.edit_message_text(
@@ -232,10 +232,19 @@ async def game(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
 
     keyboard = generate_keyboard(gc.grid)
     reply_markup = InlineKeyboardMarkup(keyboard)
+
+    if gc.is_game_over:  # maybe edit somehow else, not looking nice
+        await end(update, context, game.myself.chat_id, game.myself.message_id, gc)
+        await end(update, context, game.opponent.chat_id, game.opponent.message_id, gc)
+        multiplayer.remove_game(chat_id)
+        n_games = len(multiplayer.games)  # should be zero during testing
+        logger.info(f"Game is ended, and removed. How many games left: {n_games}")
+
     await query.edit_message_text(
         reply_markup=reply_markup,
         text=wide_message(f"Waiting for opponent\nOpponent: {game.opponent.user_name}"),
     )
+
     await context.bot.edit_message_text(
         chat_id=game.opponent.chat_id,
         message_id=game.opponent.message_id,
@@ -244,14 +253,7 @@ async def game(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
         ),
         reply_markup=reply_markup,
     )
-    logger.info(f"Player made move {move}, message rendered")
-
-    if gc.is_game_over:  # maybe edit somehow else, not looking nice
-        await end(update, context, game.myself.chat_id, game.myself.message_id, gc)
-        await end(update, context, game.opponent.chat_id, game.opponent.message_id, gc)
-        multiplayer.remove_game(chat_id)
-        n_games = len(multiplayer.games)  # should be zero during testing
-        logger.info(f"Game is ended, and removed. How many games left: {n_games}")
+    logger.info(f"Player made move {move}, messages rendered")
 
     return CONTINUE_GAME
 
