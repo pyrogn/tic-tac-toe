@@ -1,4 +1,5 @@
 import pytest
+from exceptions import GameRulesException, InvalidMove
 
 from tic_tac_toe.game import (
     DEFAULT_STATE,
@@ -69,7 +70,7 @@ def grid4():
 
 
 def test_grid_analysis(grid1, grid2, grid4):
-    assert n_empty_cells(grid1) == 4  # magic, better to change
+    assert n_empty_cells(grid1) == 4  # magic values
     assert n_empty_cells(grid2) == 3
     assert n_empty_cells(grid4) == 0
 
@@ -135,7 +136,7 @@ def test_game_conductor1():
     assert handle1.is_my_turn() == False  # type: ignore
     assert handle2.is_my_turn() == True  # type: ignore
 
-    with pytest.raises(RuntimeError, match=r".*Now it is the move of an opponent.*"):
+    with pytest.raises(InvalidMove, match=r".*Now it is the move of an opponent.*"):
         handle1((0, 1))
     assert n_empty_cells(gc.grid) == 8
     assert gc.current_move == ZERO
@@ -144,7 +145,7 @@ def test_game_conductor1():
     assert n_empty_cells(gc.grid) == 7
     assert gc.current_move == CROSS
 
-    with pytest.raises(ValueError, match=r".*this cell is not free.*"):
+    with pytest.raises(InvalidMove, match=r".*this cell is not free.*"):
         handle1((0, 0))
     assert n_empty_cells(gc.grid) == 7
     assert gc.current_move == CROSS
@@ -153,7 +154,7 @@ def test_game_conductor1():
     handle1((2, 1))  # first won
     assert n_empty_cells(gc.grid) == 4
     assert gc.result == CROSS
-    with pytest.raises(ValueError, match=r".*Game has ended, no more moves.*"):
+    with pytest.raises(GameRulesException, match=r".*Game has ended, no more moves.*"):
         handle2((2, 2))
 
 

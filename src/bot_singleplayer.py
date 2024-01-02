@@ -5,6 +5,7 @@ Bot for playing tic tac toe game with multiple CallbackQueryHandlers.
 """
 import asyncio
 from copy import deepcopy
+import telegram
 import logging
 from typing import Optional, Union
 import random
@@ -75,8 +76,8 @@ def wide_message(msg):
 def generate_keyboard(state: Grid) -> list[list[InlineKeyboardButton]]:
     """Generate tic tac toe keyboard 3x3 (telegram buttons)"""
     return [
-        [InlineKeyboardButton(state[r][c], callback_data=f"{r}{c}") for r in range(3)]
-        for c in range(3)
+        [InlineKeyboardButton(state[r][c], callback_data=f"{r}{c}") for c in range(3)]
+        for r in range(3)
     ]
 
 
@@ -167,6 +168,7 @@ async def game(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     if not handle.is_my_turn:
         logger.info(f"Player attempted to make a move not in his time")
         return CONTINUE_GAME
+    await query.answer(text=f"you chose {move}", show_alert=False)
 
     handle(move)
     logger.info(f"Player made move {move}")
@@ -244,12 +246,12 @@ def main() -> None:
     # So ^ABC$ will only allow 'ABC'
     conv_handler = ConversationHandler(
         entry_points=[
-            CommandHandler("start", start),
+            CommandHandler("start", start, block=False),
             MessageHandler(filters.ALL, first_message),
         ],
         states={
             CONTINUE_GAME: [
-                CallbackQueryHandler(game, pattern="^" + f"{r}{c}" + "$")
+                CallbackQueryHandler(game, pattern="^" + f"{r}{c}" + "$", block=False)
                 for r in range(3)
                 for c in range(3)
             ],
@@ -267,6 +269,7 @@ def main() -> None:
             MessageHandler(filters.ALL, inplay_message),
         ],
         per_message=False,
+        block=False,
     )
 
     # Add ConversationHandler to application that will be used for handling updates

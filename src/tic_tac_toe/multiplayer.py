@@ -1,6 +1,8 @@
 from collections import deque
 from queue import Queue
 from typing import Any, Literal, NamedTuple
+from exceptions import CurrentGameError, NotEnoughPlayersError, WaitRoomError
+
 from tic_tac_toe.game import (
     DEFAULT_STATE,
     get_default_state,
@@ -28,63 +30,91 @@ MessageId = int
 ChatId = int
 
 
-class Player(NamedTuple):  # use when you enable mark preferences
-    mark: str
-
-
 class ChatPlayerInfo(NamedTuple):
-    handle: Any  # maybe replace with Protocol (nice idea)
+    chat_id: ChatId
     message_id: MessageId
-
-
-def get_player_info(chat_info_dict, chat_id):
-    # handle = game_data.chat_dict[chat_id].handle
-    # my_message_id = game_data.chat_dict[chat_id].message_id
-    other_chat_id = int(list(set(chat_info_dict.keys()) - {chat_id})[0])
-    # opponents_message_id = game_data.chat_dict[other_chat_id].message_id
-    return (
-        (*chat_info_dict[chat_id], chat_id),
-        (*chat_info_dict[other_chat_id], other_chat_id),
-    )
+    handle: Any  # maybe replace with Protocol (nice idea)
+    mark: str
+    user_name: str
 
 
 class Game(NamedTuple):
-    """1 is X, 2 is O I guess (bad design)"""
-
     chat_dict: dict[ChatId, ChatPlayerInfo]
     game_conductor: GameConductor
 
 
-# Add logging??? It should be necessary for debug
+class GamePersonalized(NamedTuple):
+    myself: ChatPlayerInfo
+    opponent: ChatPlayerInfo
+    game_conductor: GameConductor
+
+
+# TODO: think what if the same player registers again with start?
+# will he play with himself?
 class Multiplayer:
     """Connects two players and gives handle with shared resources"""
 
     def __init__(self) -> None:
-        self.players_queue = Queue()  # should be actual queue
-        self.waiting_handle = None
+        self.players_queue: Queue[dict] = Queue()
+        self.waitroom = []
+        self.games: dict[ChatId, Game] = {}
 
     @property
     def is_player_waiting(self):
         if self.players_queue.qsize() > 2:
             raise ValueError("Too many players waiting game, tinder somebody please")
-        return self.players_queue != 0
+        return self.players_queue.qsize() != 0
 
-    def register_player(self, chat_id: ChatId, message_id: MessageId):
-        self.players_queue.put((chat_id, message_id))
+    def register_player(self, **kwargs):
+        assert all(  # necessary keys to connect players
+            [key in kwargs for key in ("chat_id", "message_id")]
+        ), "Some info is missing"
+        if kwargs["chat_id"] in self.games:
+            raise CurrentGameError
 
-    def get_pair(self) -> Game:
+        if kwargs["chat_id"] in self.waitroom:  # how to make it simpler?
+            raise WaitRoomError
+        self.waitroom.append(kwargs["chat_id"])
+
+        self.players_queue.put(kwargs)
+
+    def register_pair(self) -> None:
         if (self.players_queue.qsize()) < 2:
-            raise ValueError("Not enough players")
-        player1 = self.players_queue.get_nowait()
-        player2 = self.players_queue.get_nowait()
+            raise NotEnoughPlayersError("Not enough players")
+        player1_dict = self.players_queue.get_nowait()
+        player2_dict = self.players_queue.get_nowait()
+        [self.waitroom.pop(0) for _ in range(2)]
+
         gc = GameConductor()
-        # change when need to use user mark preference
+        # TODO: change when need to use user mark preference
         handle1 = gc.get_handler(CROSS, what_is_left=True)
         handle2 = gc.get_handler(CROSS, what_is_left=True)
-        return Game(
+        game = Game(
             {
-                player1[0]: ChatPlayerInfo(handle1, player1[1]),
-                player2[0]: ChatPlayerInfo(handle2, player2[1]),
+                player1_dict["chat_id"]: ChatPlayerInfo(handle=handle1, **player1_dict, mark=handle1.mark),  # type: ignore
+                player2_dict["chat_id"]: ChatPlayerInfo(handle=handle2, **player2_dict, mark=handle2.mark),  # type: ignore
             },
             gc,
+        )
+        # two links for each player
+        self.games[player1_dict["chat_id"]] = game
+        self.games[player2_dict["chat_id"]] = game
+        # return game  # do I even need to return?
+
+    def get_game(self, chat_id: ChatId) -> GamePersonalized:
+        return self._make_personalized_game(self.games[chat_id], chat_id)
+
+    def remove_game(self, chat_id) -> None:
+        """Remove two links to the game to release memory. No need to call twice."""
+        game_pers = self.get_game(chat_id)
+        chat_id_opponent = game_pers.opponent.chat_id
+        del self.games[chat_id]
+        del self.games[chat_id_opponent]
+
+    @staticmethod
+    def _make_personalized_game(game: Game, chat_id) -> GamePersonalized:
+        """Game but with attributes to distinguish myself and opponent"""
+        other_chat_id = list(set(game.chat_dict.keys()) - {chat_id})[0]
+        return GamePersonalized(
+            game.chat_dict[chat_id], game.chat_dict[other_chat_id], game.game_conductor
         )

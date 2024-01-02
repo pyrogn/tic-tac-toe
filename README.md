@@ -1,10 +1,11 @@
 # tic-tac-toe
 
-[Телеграм-бот](https://t.me/tictactoe48573bot)
+[Telegram-bot](https://t.me/tictactoe48573bot) (unlikely to be online)
 
-## Как запускать
+## How to run
 
-- Пока никак
+- `pip install .`
+- `TIC_TAC_TOE_TOKEN_TG=token app`
 
 ## TODO
 
@@ -12,10 +13,10 @@
 - [x] Make tests for game (no tests for bot I think?)
 - [x] Understand why grid is smaller before any move (add fix it)
 - [x] Add bot logic
-- [ ] Understand `python-telegram-bot` architecture (`update`, `context`)
+- [x] Understand `python-telegram-bot` architecture (`update`, `context`)
 - [x] Add multiplayer
 - [ ] Refactor project (single main script, readable code)
-- [ ] Make better exception hierarchy
+- [x] Make better exception hierarchy
 - [ ] Add some description, annotations, docstrings
 - [ ] Make more interesting text
 - [ ] Linters
@@ -24,3 +25,4 @@
 
 - Modify a game so you can rewrite or clear opponent's choice
 - Make a bot with unbeatable minimax strategy
+- Add inactivity checker (`context.job_queue.run_once`)

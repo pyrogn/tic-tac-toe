@@ -6,7 +6,7 @@ authors = [
     {name = "Pavel", email = "60060559+pyrogn@users.noreply.github.com"},
 ]
 dependencies = [
-    "python-telegram-bot>=20.7",
+    "python-telegram-bot[job-queue]>=20.7",
 ]
 requires-python = ">=3.12"
 readme = "README.md"

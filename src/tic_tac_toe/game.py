@@ -5,6 +5,8 @@ from functools import partial
 from typing import Any, Callable, Final, Literal, NamedTuple, TypeAlias
 import random
 
+from exceptions import GameRulesException, InvalidMove
+
 FREE_SPACE: Final = "."
 CROSS: Final = "X"
 ZERO: Final = "O"
@@ -52,8 +54,7 @@ def make_move(grid: Grid, move: Move, mark) -> None:
     if cell == FREE_SPACE:
         set_cell(grid, move, mark)
     else:
-        # or raise IllegalMoveException
-        raise ValueError(f"this cell is not free, but {cell}")
+        raise InvalidMove(f"this cell is not free, but {cell}")
 
 
 def get_winner(grid: Grid) -> str | None:
@@ -88,10 +89,6 @@ def random_available_move(grid: Grid) -> Move:
         if grid[row][col] == FREE_SPACE
     ]
     return random.choice(available_moves)
-
-
-class Player(NamedTuple):
-    mark: str
 
 
 class GameConductor:
@@ -133,15 +130,15 @@ class GameConductor:
     @property
     def result(self):
         if not is_game_over(self.grid):
-            raise ValueError("Game is not over")
+            raise GameRulesException("Game is not over")
         return get_winner(self.grid)
 
     def move_handler(self, move: Move, mark: str):
         """Might raise exception if the move is illegal"""
         if self.is_game_over:
-            raise ValueError("Game has ended, no more moves!")
+            raise GameRulesException("Game has ended, no more moves!")
         if self.current_move != mark:
-            raise RuntimeError(
+            raise InvalidMove(
                 "Now it is the move of an opponent, keep calm and drink cool cola"
             )
 
@@ -149,7 +146,7 @@ class GameConductor:
 
         if is_game_over(self.grid):
             self.is_game_over = True
-        self.current_move = list({CROSS, ZERO} - {mark})[0]  # now another player's turn
+        self.current_move = get_opposite_mark(mark)  # now another player's turn
 
 
 def get_opposite_mark(mark: str) -> str:
@@ -159,6 +156,4 @@ def get_opposite_mark(mark: str) -> str:
 
 
 def render_grid(grid: Grid) -> str:
-    # It changes rows and columns!!! TODO: think about it!!!
-    # print(grid)
     return "\n".join(["".join(row) for row in grid]).replace(".", "_")

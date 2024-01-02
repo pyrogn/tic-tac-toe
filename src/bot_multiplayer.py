@@ -8,6 +8,12 @@ from copy import deepcopy
 import logging
 from typing import Optional, Union
 import random
+from exceptions import (
+    CurrentGameError,
+    InvalidMove,
+    NotEnoughPlayersError,
+    WaitRoomError,
+)
 from tic_tac_toe.game import (
     DEFAULT_STATE,
     get_default_state,
@@ -29,7 +35,7 @@ from tic_tac_toe.game import (
     is_move_legal,
     GameConductor,
 )
-from tic_tac_toe.multiplayer import ChatId, Multiplayer, Game, get_player_info
+from tic_tac_toe.multiplayer import ChatId, Multiplayer, Game
 
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
@@ -79,69 +85,107 @@ def wide_message(msg):
 def generate_keyboard(state: Grid) -> list[list[InlineKeyboardButton]]:
     """Generate tic tac toe keyboard 3x3 (telegram buttons)"""
     return [
-        [InlineKeyboardButton(state[r][c], callback_data=f"{r}{c}") for r in range(3)]
-        for c in range(3)
+        [InlineKeyboardButton(state[r][c], callback_data=f"{r}{c}") for c in range(3)]
+        for r in range(3)
     ]
 
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Send message on `/start`."""
+    # likely unsafe with race conditions
+
     # assert context.user_data
     assert update.message
 
     user = update.message.from_user
-    context.user_data["game"] = f"{user.username}-another player"
-    logger.info(
-        f"Player {user.first_name or ''} {user.last_name or ''} "
-        f"(@{user.username}) has joined"
-    )
+    user_name = user.first_name
+    if user.last_name:
+        user_name += " " + user.last_name
+    user_name += " @" + user.username
+
+    logger.info(f"Player {user_name} has joined")
     chat_id = update.message.chat_id
     game = None
     # TODO: if this player has active game, do something with it
 
-    context.user_data["keyboard_state"] = get_default_state()
-    keyboard = generate_keyboard(context.user_data["keyboard_state"])
+    keyboard_state = get_default_state()
+    keyboard = generate_keyboard(keyboard_state)
     reply_markup = InlineKeyboardMarkup(keyboard)
 
-    # my_mark = CROSS if handle.n == 0 else ZERO
-    # context.user_data["handle_multiplayer"] = handle
-    # context.user_data["handle1"] = context.user_data["GameConductor"].get_handler(
-    #     my_mark
-    # )
-    # context.user_data["handle2"] = context.user_data["GameConductor"].get_handler(
-    #     get_opposite_mark(my_mark)
-    # )
-
-    if multiplayer.is_player_waiting:
-        text = "Waiting for anyone to join"
+    if multiplayer.is_player_waiting:  # == I will be his opponent
+        text = "Configuring the game for you, Sir"
     else:
-        text = "Waiting for opponent to make 1 move"
+        text = "Waiting for anyone to join"
 
     message = await update.message.reply_text(
         wide_message(text),
-        reply_markup=reply_markup,
     )
     message_id = message.message_id
-    multiplayer.register_player(chat_id, message_id)
-    try:
-        game: Game = multiplayer.get_pair()
-        games.append(game)
-        for key in game.chat_dict:
-            games_fastkey[key] = game
-        logger.info(f"Game is registered between p1 and p2")
-        # TODO: update message for first player
-        # And make it better
-        myself, opponent = get_player_info(game.chat_dict, chat_id)
+
+    try:  # maybe check with if statement to get rid of duplication?
+        multiplayer.register_player(
+            chat_id=chat_id, message_id=message_id, user_name=user_name
+        )
+    except CurrentGameError:
+        game = multiplayer.get_game(chat_id)
+        # and report to user that current game is dropped
         await context.bot.edit_message_text(
-            text="Your opponent is joined",
-            chat_id=opponent[2],
-            message_id=opponent[1],
+            text=f"Your old game with {game.opponent.user_name} has been abandoned. Creating a new game",
+            chat_id=game.myself.chat_id,
+            message_id=game.myself.message_id,
+        )
+        await context.bot.edit_message_text(
+            chat_id=game.opponent.chat_id,
+            message_id=game.opponent.message_id,
+            text=f"Your game was abandoned by: {game.myself.user_name}",
+        )
+        multiplayer.remove_game(chat_id)
+        multiplayer.register_player(
+            chat_id=chat_id, message_id=message_id, user_name=user_name
+        )
+    except WaitRoomError:
+        # alert that you are already in the queue
+        await context.bot.edit_message_text(
+            text="You are already in the queue, don't spam",
+            chat_id=message.chat_id,
+            message_id=message.message_id,
+        )
+        # await update.callback_query.answer(
+        #     text="You are already in the queue", show_alert=True
+        # )
+        return CONTINUE_GAME
+
+    try:
+        multiplayer.register_pair()
+        game = multiplayer.get_game(chat_id)
+        logger.info(
+            f"Game is registered between {game.opponent.user_name} and {game.myself.user_name}"
+        )
+
+        await context.bot.edit_message_text(
+            text=wide_message(
+                f"Your opponent {game.myself.user_name} has joined\nYour mark: {game.opponent.mark}. Make a move"
+            ),
+            chat_id=game.opponent.chat_id,
+            message_id=game.opponent.message_id,
             reply_markup=reply_markup,
         )
-    except ValueError:
-        logger.info(f"Waiting for opponent")
+        await context.bot.edit_message_text(
+            text=wide_message(
+                f"Your opponent {game.opponent.user_name}\bYour mark: {game.myself.mark}. Wait for a move"
+            ),
+            chat_id=game.myself.chat_id,
+            message_id=game.myself.message_id,
+            reply_markup=reply_markup,
+        )
 
-    logger.info(f"game {context.user_data['game']} has begun, keyboard rendered")
+    except NotEnoughPlayersError:
+        logger.info(f"Waiting for opponent")
+        return CONTINUE_GAME
+
+    logger.info(
+        f"game {game.myself.user_name} vs {game.opponent.user_name} has begun, keyboard rendered"
+    )
 
     return CONTINUE_GAME
 
@@ -152,71 +196,63 @@ async def game(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Main processing of the game"""
     # PLACE YOUR CODE HERE
 
-    game_name = context.user_data.get("game", "Unknown game")
-    logger.info(f"{game_name}: entered game coroutine")
+    # game_name = context.user_data.get("game", "Unknown game WTF?")
 
     query = update.callback_query
     assert query, "query is None, not good..."
     coords_keyboard = query.data
     assert coords_keyboard
 
-    # grid = context.user_data["keyboard_state"]
     move = int(coords_keyboard[0]), int(coords_keyboard[1])
     logger.info(f"player chose move {move}")
     chat_id = query.message.chat_id
 
-    # cries out for better design (very much)
-    grid = None
-    game_data = games_fastkey[chat_id]
-    gc = game_data.game_conductor
-    grid = gc.grid
-    myself, opponent = get_player_info(game_data.chat_dict, chat_id)
-    handle = game_data.chat_dict[chat_id].handle
-    my_message_id = game_data.chat_dict[chat_id].message_id
-    # TODO: use get_player_info
-    other_chat_id = opponent[2]
-    opponents_message_id = opponent[1]
-    # for game in games:
-    #     if chat_id in (game.player1, game.player2):
-    #         game_data = game
-    #         gc = game_data.game_conductor
-    #         grid = gc.grid
-    #         handle = game.handle1 if chat_id == game.player1 else game.handle2
-    #         break
+    game = multiplayer.get_game(chat_id)
+    game_name = f"{game.myself.user_name} {game.opponent.user_name}"
+    logger.info(f"{game_name}: entered game coroutine")
 
-    if not is_move_legal(grid, move):
-        logger.info(f"move {move} from player is illegal")
-        # edit text to warn user or show pop up
-        return CONTINUE_GAME
+    # cries out for better design (very much)
+    gc = game.game_conductor
+    handle = game.myself.handle
 
     if not handle.is_my_turn:
         logger.info(f"Player attempted to make a move not in his time")
         return CONTINUE_GAME
 
-    handle(move)
+    try:
+        handle(move)
+    except InvalidMove as f:
+        await query.answer(
+            text=f"Illegal move: {str(f)}", show_alert=True
+        )  # add actual text
+        logger.info(f"{game_name}: player tried to make illegal move")
+        return CONTINUE_GAME
+
     logger.info(f"Player made move {move}")
 
     keyboard = generate_keyboard(gc.grid)
     reply_markup = InlineKeyboardMarkup(keyboard)
     await query.edit_message_text(
-        reply_markup=reply_markup, text=wide_message("Opponent's turn")
+        reply_markup=reply_markup,
+        text=wide_message(f"Waiting for opponent\nOpponent: {game.opponent.user_name}"),
     )
     await context.bot.edit_message_text(
-        chat_id=other_chat_id,
-        message_id=opponents_message_id,
-        text=wide_message("Your turn"),
+        chat_id=game.opponent.chat_id,
+        message_id=game.opponent.message_id,
+        text=wide_message(
+            f"Your turn ({game.opponent.mark})\nOpponent: {game.myself.user_name}"
+        ),
         reply_markup=reply_markup,
     )
     logger.info(f"Player made move {move}, message rendered")
 
-    if gc.is_game_over:
-        await end(update, context, chat_id, my_message_id, gc)
-        await end(update, context, other_chat_id, opponents_message_id, gc)
+    if gc.is_game_over:  # maybe edit somehow else, not looking nice
+        await end(update, context, game.myself.chat_id, game.myself.message_id, gc)
+        await end(update, context, game.opponent.chat_id, game.opponent.message_id, gc)
+        multiplayer.remove_game(chat_id)
+        n_games = len(multiplayer.games)  # should be zero during testing
+        logger.info(f"Game is ended, and removed. How many games left: {n_games}")
 
-    # if gc.is_game_over:
-    #     return await end(update, context)
-
-    # return await bot_turn(update, context)
     return CONTINUE_GAME
 
 
@@ -234,22 +270,34 @@ async def end(
     # context.user_data["keyboard_state"] = get_default_state()
 
     # make it work, remove keyboard if someone is won
-    game_name = context.user_data["game"]
+    game = multiplayer.get_game(chat_id)
+    game_name = f"{game.myself.user_name} vs {game.opponent.user_name}"
     logger.info(f"{game_name} has ended")
     query = update.callback_query
     assert query, "Query is None. Message was deleted?"
 
-    # gc: GameConductor = context.user_data["GameConductor"]
     winner = gc.result or "Draw"
+    emoji = "\N{Face with Finger Covering Closed Lips}"
+    if winner != "Draw":
+        if winner == game.myself.mark:
+            winner_player = game.myself.user_name
+            emoji = "\N{Smiling Face with Sunglasses}"
+        else:
+            winner_player = game.opponent.user_name
+            emoji = "\N{Melting Face}"
+        winner = f"{winner_player}({winner})"
     rendered_grid = render_grid(gc.grid)
-    text = rendered_grid + f"\nWinner in this game: {winner}.\nThanks for playing"
+    text = (
+        rendered_grid
+        + "\n"
+        + emoji
+        + f"\nWinner in this game: ({winner}).\nThanks for playing"
+    )
     await query.answer()
-    # await query.edit_message_text(text=text)
     await context.bot.edit_message_text(
         text=text, chat_id=chat_id, message_id=message_id
     )
     logger.info(f"{game_name} has ended, message rendered. winner: {winner}")
-    # TODO: remove game from list/dict/whatever
     return ConversationHandler.END
 
 
@@ -270,13 +318,8 @@ async def inplay_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     return CONTINUE_GAME
 
 
-# class HandlerOpponent(BaseHandler):
-#     # https://docs.python-telegram-bot.org/en/v20.7/telegram.ext.basehandler.html
-#     def check_update(self, update: object) -> bool | object | None:
-#         return True
-
-
 def main() -> None:
+    # TODO: make block=False on handlers because we don't want wait for telegram response much
     """Run the bot"""
     # Create the Application and pass it your bot's token.
     application = Application.builder().token(TOKEN).build()
@@ -287,32 +330,32 @@ def main() -> None:
     # ^ means "start of line/string"
     # $ means "end of line/string"
     # So ^ABC$ will only allow 'ABC'
-    conv_handler = ConversationHandler(
-        entry_points=[
-            CommandHandler("start", start),
-            MessageHandler(filters.ALL, first_message),
-        ],
-        states={
-            CONTINUE_GAME: [
-                CallbackQueryHandler(game, pattern="^" + f"{r}{c}" + "$")
-                for r in range(3)
-                for c in range(3)
-            ],
-            # add state with options: want to play again?
-            # Aren't used for now, maybe will be with multiplayer
-            END_STATE: [
-                #     HandlerOpponent(bot_turn)
-                # CallbackQueryHandler(end, pattern="^" + f"{r}{c}" + "$")
-                # for r in range(3)
-                # for c in range(3)
-            ],
-        },
-        fallbacks=[
-            CommandHandler("start", start),
-            MessageHandler(filters.ALL, inplay_message),
-        ],
-        per_message=False,
-    )
+    # conv_handler = ConversationHandler(
+    #     entry_points=[
+    #         CommandHandler("start", start),
+    #         MessageHandler(filters.ALL, first_message),
+    #     ],
+    #     states={
+    #         CONTINUE_GAME: [
+    #             CallbackQueryHandler(game, pattern="^" + f"{r}{c}" + "$")
+    #             for r in range(3)
+    #             for c in range(3)
+    #         ],
+    #         # add state with options: want to play again?
+    #         # Aren't used for now, maybe will be with multiplayer
+    #         END_STATE: [
+    #             #     HandlerOpponent(bot_turn)
+    #             # CallbackQueryHandler(end, pattern="^" + f"{r}{c}" + "$")
+    #             # for r in range(3)
+    #             # for c in range(3)
+    #         ],
+    #     },
+    #     fallbacks=[
+    #         CommandHandler("start", start),
+    #         MessageHandler(filters.ALL, inplay_message),
+    #     ],
+    #     per_message=False,
+    # )
 
     application.add_handler(CommandHandler("start", start))
     [
@@ -323,7 +366,7 @@ def main() -> None:
         for c in range(3)
     ]
     # Add ConversationHandler to application that will be used for handling updates
-    application.add_handler(conv_handler)
+    # application.add_handler(conv_handler)
 
     # Run the bot until the user presses Ctrl-C
     application.run_polling(allowed_updates=Update.ALL_TYPES)
