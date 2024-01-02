@@ -12,6 +12,9 @@ requires-python = ">=3.12"
 readme = "README.md"
 license = {text = "MIT"}
 
+[project.scripts]
+app = "tic_tac_toe.bot:main"
+
 [project.optional-dependencies]
 test = [
     "pytest>=7.4.3",
@@ -22,10 +25,13 @@ lint = [
     "black>=23.12.1",
     "ruff>=0.1.9",
 ]
+dev = [
+    "pip>=23.3.2",
+]
 [build-system]
 requires = ["setuptools>=61", "wheel"]
 build-backend = "setuptools.build_meta"
 
 
 [tool.pdm]
-package-type = "library"
+package-type = "application"
