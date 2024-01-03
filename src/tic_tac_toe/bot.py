@@ -1,59 +1,51 @@
 """
-Bot for playing tic tac toe game with multiple CallbackQueryHandlers.
+Telegram bot for playing tic tac toe game.
+There are implementation of singleplayer and multiplayer
 """
-from ast import parse
 import asyncio
-from copy import deepcopy
 import logging
-from typing import Optional, Union
+import os
 import random
-from tic_tac_toe.exceptions import (
-    CurrentGameError,
-    InvalidMove,
-    NotEnoughPlayersError,
-    WaitRoomError,
-)
-from tic_tac_toe.game import (
-    DEFAULT_STATE,
-    find_optimal_move,
-    get_default_state,
-    Cell,
-    Grid,
-    Move,
-    FREE_SPACE,
-    CROSS,
-    ZERO,
-    get_opposite_mark,
-    render_grid,
-    select_cell,
-    n_empty_cells,
-    is_game_over,
-    make_move,
-    get_winner,
-    set_cell,
-    random_available_move,
-    is_move_legal,
-    GameConductor,
-)
-from tic_tac_toe.multiplayer import ChatId, Multiplayer, Game
-
+from warnings import filterwarnings
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import (
     Application,
     CallbackQueryHandler,
     CommandHandler,
-    MessageHandler,
     ContextTypes,
-    BaseHandler,
     ConversationHandler,
-    filters,
 )
-import os
-from warnings import filterwarnings
 from telegram.warnings import PTBUserWarning
 
-from tic_tac_toe.notifications import get_full_user_name, get_message, wide_message
+from tic_tac_toe.exceptions import (
+    InvalidMove,
+    NotEnoughPlayersError,
+)
+from tic_tac_toe.game import (
+    CROSS,
+    ZERO,
+    GameConductor,
+    Grid,
+    find_optimal_move,
+    get_default_state,
+    is_move_legal,
+    n_empty_cells,
+)
+from tic_tac_toe.multiplayer import ChatId, Game, Multiplayer
+from tic_tac_toe.notifications import get_full_user_name, wide_message
+
+# get token using BotFather
+TOKEN = os.getenv("TIC_TAC_TOE_TOKEN_TG")  # I put it in zsh config
+assert TOKEN, "Token not found in env vars (TIC_TAC_TOE_TOKEN_TG)"
+
+(
+    CHOICE_GAME_TYPE,
+    CONTINUE_GAME_SINGLEPLAYER,
+    CONTINUE_GAME_MULTIPLAYER,
+    PLAY_AGAIN,
+    MARK_CHOICE,
+) = range(5)
 
 filterwarnings(
     action="ignore", message=r".*CallbackQueryHandler", category=PTBUserWarning
@@ -68,18 +60,6 @@ logging.getLogger("httpx").setLevel(logging.WARNING)
 
 logger = logging.getLogger(__name__)
 
-# get token using BotFather
-TOKEN = os.getenv("TIC_TAC_TOE_TOKEN_TG")  # I put it in zsh config
-assert TOKEN, "Token not found in env vars"
-
-(
-    CHOICE_GAME_TYPE,
-    CONTINUE_GAME_SINGLEPLAYER,
-    CONTINUE_GAME_MULTIPLAYER,
-    PLAY_AGAIN,
-    MARK_CHOICE,
-) = range(5)
-
 
 multiplayer = Multiplayer()
 games: list[Game] = []
@@ -88,9 +68,12 @@ games_fastkey: dict[ChatId, Game] = {}
 
 async def rules(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.message
-    rules = r"""*1\. You play 1 step at a time
-2\. X has the right of first move*"""
+    rules = r"""*\
+1\. You play 1 step at a time
+2\. X plays first
+3\. Player who joined multiplayer before an opponent plays first as X*"""
     await query.reply_text(text=rules, parse_mode="MarkdownV2")
+
 
 def generate_keyboard(state: Grid) -> list[list[InlineKeyboardButton]]:
     """Generate tic tac toe keyboard 3x3 (telegram buttons)"""
@@ -161,7 +144,7 @@ async def mark_choice(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif mark_choice == "3":
         mark = random.choice([CROSS, ZERO])
     else:
-        raise ValueError(f"Mark isn't identified: {mark_choice}")
+        raise ValueError(f"Mark isn't identified: {mark_choice}") from None
 
     context.user_data["keyboard_state"] = get_default_state()
     keyboard = generate_keyboard(context.user_data["keyboard_state"])
@@ -172,10 +155,11 @@ async def mark_choice(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data["handle2"] = context.user_data["GameConductor"].get_handler(
         what_is_left=True
     )
+    my_mark = context.user_data["handle1"].mark
     if context.user_data["handle1"].is_my_turn():
-        text=f"It is your turn. Put {context.user_data["handle1"].mark} it down."
+        text = f"It is your turn. Put {my_mark} it down."
     else:
-        text="Waiting for a bot to make a move"
+        text = "Waiting for a bot to make a move"
     await query.edit_message_text(
         text=wide_message(text),
         reply_markup=reply_markup,
@@ -260,7 +244,7 @@ async def game_singleplayer(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         handle(move)
     except InvalidMove as f:
         await query.answer(text=f"Illegal move: {str(f)}", show_alert=True)
-        logger.info(f"player tried to make illegal move")
+        logger.info("player tried to make illegal move")
         return CONTINUE_GAME_SINGLEPLAYER
 
     gc: GameConductor = context.user_data["GameConductor"]
@@ -294,7 +278,7 @@ async def bot_turn(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     # thinking simulation
     # first moves are slow by computations
     if n_empty_cells(gc.grid) < 8:
-        sec_sleep = random.randint(1, 5) / 10
+        sec_sleep = random.randint(2, 5) / 10
         await asyncio.sleep(sec_sleep)
 
     keyboard = generate_keyboard(gc.grid)
@@ -333,11 +317,7 @@ async def start_multiplayer(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     else:
         text = "Waiting for anyone to join"
 
-    # message = await update.message.reply_text(
-    #     wide_message(text),
-    # )
-
-    message = context.user_data["bot_message"]
+    context.user_data["bot_message"]
     message_id = context.user_data["bot_message"].message_id
     await context.bot.edit_message_text(
         chat_id=chat_id,
@@ -354,12 +334,14 @@ async def start_multiplayer(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         multiplayer.register_pair()
         game = multiplayer.get_game(chat_id)
         logger.info(
-            f"Game is registered between {game.opponent.user_name} and {game.myself.user_name}"
+            f"Game is registered between {game.opponent.user_name}"
+            f" and {game.myself.user_name}"
         )
 
         await context.bot.edit_message_text(
             text=wide_message(
-                f"Your opponent {game.myself.user_name} has joined\nYour mark: {game.opponent.mark}. Make a move"
+                f"Your opponent {game.myself.user_name} has joined\n"
+                f"Your mark: {game.opponent.mark}. Make a move"
             ),
             chat_id=game.opponent.chat_id,
             message_id=game.opponent.message_id,
@@ -367,7 +349,8 @@ async def start_multiplayer(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         )
         await context.bot.edit_message_text(
             text=wide_message(
-                f"Your opponent {game.opponent.user_name}\bYour mark: {game.myself.mark}. Wait for a move"
+                f"Your opponent {game.opponent.user_name}\n"
+                f"Your mark: {game.myself.mark}. Wait for a move"
             ),
             chat_id=game.myself.chat_id,
             message_id=game.myself.message_id,
@@ -375,11 +358,12 @@ async def start_multiplayer(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         )
 
     except NotEnoughPlayersError:
-        logger.info(f"Waiting for opponent")
+        logger.info("Waiting for opponent")
         return CONTINUE_GAME_MULTIPLAYER
 
     logger.info(
-        f"game {game.myself.user_name} vs {game.opponent.user_name} has begun, keyboard rendered"
+        f"game {game.myself.user_name} vs {game.opponent.user_name} "
+        "has begun, keyboard rendered"
     )
 
     return CONTINUE_GAME_MULTIPLAYER
@@ -406,7 +390,7 @@ async def game_multiplayer(update: Update, context: ContextTypes.DEFAULT_TYPE) -
     handle = game.myself.handle
 
     if not handle.is_my_turn:
-        logger.info(f"Player attempted to make a move not in his time")
+        logger.info("Player attempted to make a move not in his time")
         return CONTINUE_GAME_MULTIPLAYER
 
     try:
@@ -475,7 +459,7 @@ async def end_singleplayer(update: Update, context: ContextTypes.DEFAULT_TYPE) -
 
     gc: GameConductor = context.user_data["GameConductor"]
     winner = gc.result or "Draw"
-    rendered_grid = render_grid(gc.grid)
+    rendered_grid = str(gc)
     text = rendered_grid + f"\nWinner in this game: {winner}.\nThanks for playing"
     await query.answer()
     await query.edit_message_text(text=text)
@@ -528,7 +512,7 @@ async def end_multiplayer(
             winner_player = game.opponent.user_name
             emoji = "\N{Melting Face}"
         winner = f"{winner_player}({winner})"
-    rendered_grid = render_grid(gc.grid)
+    rendered_grid = str(gc)
     text = (
         rendered_grid
         + "\n"

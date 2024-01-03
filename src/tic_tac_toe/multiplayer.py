@@ -1,34 +1,17 @@
-from collections import deque
-from queue import Queue
-from typing import Any, Literal, NamedTuple
+"""Module with helpers for multiplayer game of Tic Tac Toe"""
+from typing import NamedTuple
+
 from tic_tac_toe.exceptions import (
     CurrentGameError,
     NotEnoughPlayersError,
     WaitRoomError,
 )
-
 from tic_tac_toe.game import (
-    DEFAULT_STATE,
-    get_default_state,
-    Cell,
-    Grid,
-    Move,
-    FREE_SPACE,
     CROSS,
-    ZERO,
-    render_grid,
-    select_cell,
-    n_empty_cells,
-    is_game_over,
-    make_move,
-    get_winner,
-    set_cell,
-    random_available_move,
-    is_move_legal,
     GameConductor,
+    HandleForPlayer,
+    Mark,
 )
-import asyncio
-
 
 MessageId = int
 ChatId = int
@@ -37,8 +20,8 @@ ChatId = int
 class ChatPlayerInfo(NamedTuple):
     chat_id: ChatId
     message_id: MessageId
-    handle: Any  # maybe replace with Protocol (nice idea)
-    mark: str
+    handle: HandleForPlayer
+    mark: Mark
     user_name: str
 
 
@@ -57,7 +40,7 @@ class Multiplayer:
     """Connects two players and other magic"""
 
     def __init__(self) -> None:
-        # better to be Queue, but it is harder to work with
+        # better and more efficient to be Queue, but it is harder to work with
         self.players_queue: list[dict] = []
         self.games: dict[ChatId, Game] = {}
 
@@ -88,13 +71,16 @@ class Multiplayer:
         player2_dict = self.players_queue.pop(0)
 
         gc = GameConductor()
-        # TODO: change when need to use user mark preference
         handle1 = gc.get_handler(CROSS, what_is_left=True)
         handle2 = gc.get_handler(CROSS, what_is_left=True)
         game = Game(
             {
-                player1_dict["chat_id"]: ChatPlayerInfo(handle=handle1, **player1_dict, mark=handle1.mark),  # type: ignore
-                player2_dict["chat_id"]: ChatPlayerInfo(handle=handle2, **player2_dict, mark=handle2.mark),  # type: ignore
+                player1_dict["chat_id"]: ChatPlayerInfo(  # beauty of Python
+                    handle=handle1, **player1_dict, mark=handle1.mark
+                ),
+                player2_dict["chat_id"]: ChatPlayerInfo(
+                    handle=handle2, **player2_dict, mark=handle2.mark
+                ),
             },
             gc,
         )

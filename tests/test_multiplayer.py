@@ -1,14 +1,7 @@
+"""Tests for multiplayer helpers"""
 import pytest
-import asyncio
 from tic_tac_toe.exceptions import NotEnoughPlayersError
-
-# TODO: write tests when you will have understanding with your API
-
 from tic_tac_toe.multiplayer import GamePersonalized, Multiplayer
-
-# @pytest.fixture(scope="module")
-# def multiplayer():
-#     return Multiplayer()
 
 
 def test_startup_multiplayer():

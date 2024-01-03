@@ -1,26 +1,21 @@
+"""Tests for game engine and different helpers."""
 import pytest
-from tic_tac_toe.exceptions import GameRulesException, InvalidMove
-
+from tic_tac_toe.exceptions import GameRulesError, InvalidMove
 from tic_tac_toe.game import (
-    DEFAULT_STATE,
-    get_default_state,
-    Cell,
-    Grid,
-    Move,
-    FREE_SPACE,
     CROSS,
+    FREE_SPACE,
     ZERO,
-    get_opposite_mark,
-    render_grid,
-    select_cell,
-    n_empty_cells,
-    is_game_over,
-    make_move,
-    get_winner,
-    set_cell,
-    random_available_move,
-    is_move_legal,
     GameConductor,
+    get_default_state,
+    get_opposite_mark,
+    get_winner,
+    is_game_over,
+    is_move_legal,
+    make_move,
+    n_empty_cells,
+    random_available_move,
+    select_cell,
+    set_cell,
 )
 
 
@@ -114,7 +109,7 @@ def test_moves(grid1, grid2):
 
 def test_random_choice():
     grid = get_default_state()
-    for _ in range(9):  # some rule bending, but random resilient
+    for _ in range(9):  # some rules bending, but random becomes predictable
         move = random_available_move(grid)
         set_cell(grid, move, CROSS)
 
@@ -133,8 +128,8 @@ def test_game_conductor1():
     handle2 = gc.get_handler()  # get zero that is left
 
     handle1((0, 1))
-    assert handle1.is_my_turn() == False  # type: ignore
-    assert handle2.is_my_turn() == True  # type: ignore
+    assert handle1.is_my_turn() is False
+    assert handle2.is_my_turn() is True
 
     with pytest.raises(InvalidMove, match=r".*Now it is the move of an opponent.*"):
         handle1((0, 1))
@@ -154,17 +149,15 @@ def test_game_conductor1():
     handle1((2, 1))  # first won
     assert n_empty_cells(gc.grid) == 4
     assert gc.result == CROSS
-    with pytest.raises(GameRulesException, match=r".*Game has ended, no more moves.*"):
+    with pytest.raises(GameRulesError, match=r".*Game has ended, no more moves.*"):
         handle2((2, 2))
 
-
-# it is kind of broken, see function definition
-def test_render_grid(grid1):
-    rendered_grid = """_XO\nX_O\n_X_"""
-    assert render_grid(grid1) == rendered_grid
+    rendered_grid = "OXO\n_X_\n_X_"
+    assert str(gc) == rendered_grid
 
 
 def test_opposite_mark():
+    """Test for basic ternary operator for marks"""
     assert get_opposite_mark(CROSS) == ZERO
     assert get_opposite_mark(ZERO) == CROSS
     with pytest.raises(ValueError):
@@ -175,5 +168,5 @@ def test_get_mark():
     gc = GameConductor()
     handle1 = gc.get_handler(CROSS, what_is_left=True)
     handle2 = gc.get_handler(CROSS, what_is_left=True)
-    assert handle1.is_my_turn() == True  # type: ignore
-    assert handle2.is_my_turn() == False  # type: ignore
+    assert handle1.is_my_turn() is True
+    assert handle2.is_my_turn() is False

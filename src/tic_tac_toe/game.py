@@ -1,55 +1,64 @@
-"""Tic tac toe 3x3 grid.
+"""Tic tac toe game engine with 3x3 grid and quite standard rules.
+
 Definition and functions"""
+
+import random
 from copy import deepcopy
 from functools import partial
-from typing import Any, Callable, Final, Literal, NamedTuple, TypeAlias
-import random
+from typing import Final, Literal, Protocol, TypeAlias
 
-from tic_tac_toe.exceptions import GameRulesException, InvalidMove
+from tic_tac_toe.exceptions import GameRulesError, InvalidMove
 
 FREE_SPACE: Final = "."
 CROSS: Final = "X"
 ZERO: Final = "O"
 
 
-DEFAULT_STATE: Final = [[FREE_SPACE for _ in range(3)] for _ in range(3)]
-
-Cell: TypeAlias = str
-Grid: TypeAlias = list[list[Cell]]
 Move: TypeAlias = tuple[int, int]
-# Mark: TypeAlias = Literal[".", "X", "O"]  # cannot use variables (Pylance)
+Mark: TypeAlias = Literal[".", "X", "O"]  # cannot use variables (Pylance)
+Grid: TypeAlias = list[list[Mark]]
+
+# CONFUSED: don't know how to write type for it
+# Final[List[FREE_SPACE]] doesn't work
+DEFAULT_STATE = [[FREE_SPACE for _ in range(3)] for _ in range(3)]
 
 
-def get_default_state():
+def get_default_state() -> Grid:
     """Helper function to get default state of the game"""
     return deepcopy(DEFAULT_STATE)
 
 
-def select_cell(grid: Grid, move: Move) -> Cell:
+def select_cell(grid: Grid, move: Move) -> Mark:
     r, c = move
     return grid[r][c]
 
 
-def set_cell(grid: Grid, move: Move, mark: str) -> None:
-    "Set an element in place"
-    # I like immutability, but it'll require extra data copy with only 1 change
+def set_cell(grid: Grid, move: Move, mark: Mark) -> None:
+    "Set a mark in play grid in place"
     r, c = move
     grid[r][c] = mark
 
 
 def n_empty_cells(grid: Grid) -> int:
+    """Count number of empty cells in play grid"""
     return sum(elem == FREE_SPACE for row in grid for elem in row)
 
 
 def is_game_over(grid: Grid) -> bool:
+    """Game is over if there is a winner of no empty cells"""
     return (n_empty_cells(grid) == 0) | (get_winner(grid) is not None)
 
 
 def is_move_legal(grid: Grid, move: Move) -> bool:
+    """Move is legal if there is an empty cell"""
     return select_cell(grid, move) == FREE_SPACE
 
 
 def make_move(grid: Grid, move: Move, mark) -> None:
+    """Put move into the grid.
+
+    Raises:
+        InvalidMove: if this cell is already taken"""
     cell = select_cell(grid, move)
     if cell == FREE_SPACE:
         set_cell(grid, move, mark)
@@ -57,10 +66,10 @@ def make_move(grid: Grid, move: Move, mark) -> None:
         raise InvalidMove(f"this cell is not free, but {cell}")
 
 
-def get_winner(grid: Grid) -> str | None:
+def get_winner(grid: Grid) -> Mark | None:
     """Find a winner and return it. If None, return None"""
     winner = set()
-    for mark in (CROSS, ZERO):  # I can rewrite it maybe?
+    for mark in (CROSS, ZERO):
         for row in range(3):  # horizontal
             if all([i == mark for i in grid[row]]):
                 winner.add(mark)
@@ -74,7 +83,7 @@ def get_winner(grid: Grid) -> str | None:
     if len(winner) == 0:
         return None  # draw or game is not over
     if len(winner) > 1:
-        raise ValueError("Two winners, this is nonsense")
+        raise GameRulesError("Two winners, this is nonsense")
     return list(winner)[0]
 
 
@@ -92,6 +101,16 @@ def random_available_move(grid: Grid) -> Move:
     return random.choice(available_moves)
 
 
+class HandleForPlayer(Protocol):
+    mark: Mark
+
+    def __call__(self, move: Move) -> None:
+        ...
+
+    def is_my_turn(self) -> bool:
+        ...
+
+
 class GameConductor:
     """Conductor
     Game Rules:
@@ -99,17 +118,22 @@ class GameConductor:
     """
 
     def __init__(self):
-        self.grid = get_default_state()
-        self._available_marks = {CROSS, ZERO}
-        self.current_move = CROSS  # first move
-        self.is_game_over = False
+        self.grid: Grid = get_default_state()
+        self._available_marks: set[Mark] = {CROSS, ZERO}
+        self.current_move: Mark = CROSS  # first move
+        self.is_game_over: bool = False
 
-    def get_handler(self, mark: str | None = None, what_is_left: bool = False):
+    def get_handler(
+        self,
+        mark: Mark | None = None,
+        what_is_left: bool = False,
+    ) -> HandleForPlayer:
         """You just call returned function with coordinates"""
         if mark and mark not in (CROSS, ZERO):
             raise ValueError(f"This mark {mark} is unknown")
 
         # some logic is still unclear
+        # TODO: think about it
         if what_is_left and len(self._available_marks) == 2:
             mark = CROSS
         elif not mark or what_is_left:
@@ -120,24 +144,26 @@ class GameConductor:
         except KeyError:
             raise KeyError("This mark is already taken for this game instance")
 
-        handler = partial(self.move_handler, mark=mark)
+        handle = partial(self.full_handle, mark=mark)
 
-        # full dynamism (most importantly, legal!)
-        handler.is_my_turn = lambda: self.current_move == mark  # type: ignore
-        handler.mark = mark  # type: ignore
+        # full dynamism (Pylance is crazy)
+        # but I really like this way
+        # CONFUSED: is there a better way to create a handle for player?
+        handle.is_my_turn = lambda: self.current_move == mark
+        handle.mark = mark
 
-        return handler
+        return handle
 
     @property
-    def result(self):
+    def result(self) -> Mark | None:
         if not is_game_over(self.grid):
-            raise GameRulesException("Game is not over")
+            raise GameRulesError("Game is not over")
         return get_winner(self.grid)
 
-    def move_handler(self, move: Move, mark: str):
+    def full_handle(self, move: Move, mark: Mark) -> None:
         """Might raise exception if the move is illegal"""
         if self.is_game_over:
-            raise GameRulesException("Game has ended, no more moves!")
+            raise GameRulesError("Game has ended, no more moves!")
         if self.current_move != mark:
             raise InvalidMove(
                 "Now it is the move of an opponent, keep calm and drink cool cola"
@@ -149,15 +175,16 @@ class GameConductor:
             self.is_game_over = True
         self.current_move = get_opposite_mark(mark)  # now another player's turn
 
+    def __str__(self) -> str:
+        """Render grid in some readable string"""
+        return "\n".join(["".join(row) for row in self.grid]).replace(".", "_")
 
-def get_opposite_mark(mark: str) -> str:
+
+def get_opposite_mark(mark: Mark) -> Mark:
+    """Get opposite mark out of O and X"""
     if mark not in (CROSS, ZERO):
         raise ValueError(mark + " not in marks")
-    return list({CROSS, ZERO} - {mark})[0]
-
-
-def render_grid(grid: Grid) -> str:
-    return "\n".join(["".join(row) for row in grid]).replace(".", "_")
+    return ZERO if mark == CROSS else CROSS
 
 
 def iter_through_cells(grid: Grid):
@@ -166,15 +193,14 @@ def iter_through_cells(grid: Grid):
             grid[r][c]
 
 
-def minimax_move_score(grid: Grid, mark: str, max_score: int) -> int:
+def minimax_move_score(grid: Grid, mark: Mark, max_score: int) -> int:
     if is_game_over(grid):
         winner = get_winner(grid)
-        if not winner:
+        if not winner:  # draw
             return 0
-        elif winner == mark:
+        if winner == mark:  # win
             return 10
-        else:
-            return -10
+        return -10  # lose
 
     best_score = -200
     for r in range(3):
@@ -193,7 +219,7 @@ def minimax_move_score(grid: Grid, mark: str, max_score: int) -> int:
     return best_score
 
 
-def find_optimal_move(grid: Grid, mark: str) -> Move:
+def find_optimal_move(grid: Grid, mark: Mark) -> Move:
     best_score, move = -200, (100, 100)
     grid = deepcopy(grid)
     for r in range(3):

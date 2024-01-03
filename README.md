@@ -26,11 +26,11 @@
 - [x] Make use of marks (singleplayer only)
 - [ ] Add some description, annotations, docstrings
 - [ ] Make code more readable
-- [ ] Make more interesting text
-- [ ] Linters
+- [ ] Create more interesting text (pictures, gif?)
+- [x] Linters
 
 ## Ideas
 
 - Modify a game so you can rewrite or clear opponent's choice (crazy actually, but no need to change bot.py, only game.py)
 - (Done) Make a bot with unbeatable minimax strategy
-- [(It is complicated)](https://github.com/python-telegram-bot/python-telegram-bot/issues/1907) Add inactivity checker (`context.job_queue.run_once`)
+- ([It is complicated](https://github.com/python-telegram-bot/python-telegram-bot/issues/1907), and I didn't make it work) Add inactivity checker (`context.job_queue.run_once`)

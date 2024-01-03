@@ -1,16 +1,9 @@
-"""Notification for two players in multiplayer mode
+"""Helpers for main code of a bot.
 
-We can send alert, update text, update text with reply_markup,
-something with username, mark and so on...
-
-Wide message"""
+This includes formatting and common operations with data strctures"""
 
 from telegram import User
 from telegram.ext import (
-    Application,
-    CallbackQueryHandler,
-    CommandHandler,
-    MessageHandler,
     ContextTypes,
 )
 

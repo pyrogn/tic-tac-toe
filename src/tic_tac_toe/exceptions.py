@@ -1,4 +1,4 @@
-"""Exceptions for bot"""
+"""Custom exceptions for a bot."""
 
 
 class TicTacToeException(Exception):
@@ -9,8 +9,8 @@ class InvalidMove(TicTacToeException):
     "Invalid move"
 
 
-class GameRulesException(TicTacToeException):
-    "Something broken with rules"
+class GameRulesError(TicTacToeException):
+    "Something is broken with the game rules"
 
 
 class MultiplayerError(TicTacToeException):
