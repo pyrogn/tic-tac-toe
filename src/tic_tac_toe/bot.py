@@ -51,7 +51,7 @@ import os
 from warnings import filterwarnings
 from telegram.warnings import PTBUserWarning
 
-from tic_tac_toe.notifications import get_full_user_name, wide_message
+from tic_tac_toe.notifications import get_full_user_name, get_message, wide_message
 
 filterwarnings(
     action="ignore", message=r".*CallbackQueryHandler", category=PTBUserWarning
@@ -92,6 +92,10 @@ def generate_keyboard(state: Grid) -> list[list[InlineKeyboardButton]]:
 
 
 async def start_multichoice(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    # TODO: check if with this action user do not abandon the game or queue in multiplayer!!!
+
+    if "bot_message" not in context.bot_data:
+        context.bot_data["bot_message"] = {}
     keyboard = [
         [
             InlineKeyboardButton("Singleplayer", callback_data="1"),
@@ -108,24 +112,66 @@ async def start_multichoice(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         text="Press what type of game you want to play",
         reply_markup=InlineKeyboardMarkup(keyboard),
     )
+
+    if multiplayer.is_this_player_in_waitlist(message.chat_id):
+        player_last_game_info = multiplayer.get_player_from_queue(message.chat_id)
+        multiplayer.remove_player_from_queue(message.chat_id)
+        # bot_message_id = get_message(context, message.chat_id)
+        await context.bot.edit_message_text(
+            text="You left the queue for multiplayer",
+            chat_id=message.chat_id,
+            message_id=player_last_game_info["message_id"],
+        )
+    elif message.chat_id in multiplayer.games:
+        game = multiplayer.get_game(message.chat_id)
+        # and report to user that current game is dropped
+        multiplayer.remove_game(message.chat_id)
+        await context.bot.edit_message_text(
+            text=f"Your old game with {game.opponent.user_name} has been abandoned.",
+            chat_id=game.myself.chat_id,
+            message_id=game.myself.message_id,
+        )
+        await context.bot.edit_message_text(
+            chat_id=game.opponent.chat_id,
+            message_id=game.opponent.message_id,
+            text=f"Your game was abandoned by: {game.myself.user_name}",
+        )
+
     context.user_data["bot_message"] = message  # keep message to edit it later on
+    context.bot_data["bot_message"][message.chat_id] = message
     return CHOICE_GAME_TYPE
 
 
-async def wanna_play_again(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+async def wanna_play_again(
+    update: Update, context: ContextTypes.DEFAULT_TYPE, chats_multiplayer=None
+) -> int:
+    # TODO: parametrize for use of two players (chat_id and bot_message)
+    # store message in dictionary in bot_data
     keyboard = [
         [
-            InlineKeyboardButton("Yeah! I'm feeling lucky!!", callback_data="1"),
-            InlineKeyboardButton("I am a big grumpy...", callback_data="2"),
+            InlineKeyboardButton("Yeah! I'm feeling lucky!!", callback_data="91"),
+            InlineKeyboardButton("Nah... I am a big grumpy...", callback_data="92"),
         ]
     ]
-    query = update.callback_query
-    message = await query.message.reply_text(
-        text="Do you want to play again?",
-        reply_markup=InlineKeyboardMarkup(keyboard),
-    )
-    context.user_data["bot_message"] = message
-    # return PLAY_AGAIN
+    text = "Do you want to play again?"
+    if not chats_multiplayer:
+        query = update.callback_query
+        message = await query.message.reply_text(
+            text=text,
+            reply_markup=InlineKeyboardMarkup(keyboard),
+        )
+        context.user_data["bot_message"] = message
+
+        context.bot_data["bot_message"][message.chat_id] = message
+        return PLAY_AGAIN
+    else:
+        for chat_id in chats_multiplayer:
+            print("send message to", chat_id)
+            message = await context.bot.send_message(
+                chat_id=chat_id, text=text, reply_markup=InlineKeyboardMarkup(keyboard)
+            )
+            print("Printed ", message, " in ", chat_id)
+            context.bot_data["bot_message"][chat_id] = message
 
 
 async def start_singleplayer(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -164,7 +210,7 @@ async def game_singleplayer(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     coords_keyboard = query.data
     assert coords_keyboard
 
-    grid = context.user_data["keyboard_state"]
+    # grid = context.user_data["keyboard_state"]
     move = int(coords_keyboard[0]), int(coords_keyboard[1])
     logger.info(f"player chose move {move}")
 
@@ -230,7 +276,6 @@ async def start_multiplayer(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     """Send message on `/start`."""
     # likely unsafe with race conditions
 
-    # assert context.user_data
     query = update.callback_query
     assert query.message, "How come no message?"
     user = query.from_user
@@ -262,36 +307,10 @@ async def start_multiplayer(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         text=wide_message(text),
     )
 
-    try:
-        multiplayer.register_player(
-            chat_id=chat_id, message_id=message_id, user_name=user_name
-        )
-    except CurrentGameError:
-        game = multiplayer.get_game(chat_id)
-        # and report to user that current game is dropped
-        multiplayer.remove_game(chat_id)
-        multiplayer.register_player(
-            chat_id=chat_id, message_id=message_id, user_name=user_name
-        )
-        await context.bot.edit_message_text(
-            text=f"Your old game with {game.opponent.user_name} has been abandoned. Creating a new game",
-            chat_id=game.myself.chat_id,
-            message_id=game.myself.message_id,
-        )
-        await context.bot.edit_message_text(
-            chat_id=game.opponent.chat_id,
-            message_id=game.opponent.message_id,
-            text=f"Your game was abandoned by: {game.myself.user_name}",
-        )
-
-    except WaitRoomError:
-        # alert that you are already in the queue
-        await context.bot.edit_message_text(
-            text="You are already in the queue, don't spam please",
-            chat_id=message.chat_id,
-            message_id=message.message_id,
-        )
-        return CONTINUE_GAME_MULTIPLAYER
+    # we check in /start command that player doesn't play in multiplayer right now
+    multiplayer.register_player(
+        chat_id=chat_id, message_id=message_id, user_name=user_name
+    )
 
     try:
         multiplayer.register_pair()
@@ -377,6 +396,19 @@ async def game_multiplayer(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         n_games = len(multiplayer.games)  # should be zero during testing
         logger.info(f"Game is ended, and removed. How many games left: {n_games}")
 
+        # id1 = get_message(context, game.myself.chat_id)
+        # id2 = get_message(context, game.opponent.chat_id)
+        await wanna_play_again(
+            update,
+            context,
+            chats_multiplayer=(game.myself.chat_id, game.opponent.chat_id),
+        )
+        return CONTINUE_GAME_MULTIPLAYER
+        # await query.edit_message_text()
+        # TODO: update and print options for two players
+        # return await wanna_play_again(update, context)
+        # return PLAY_AGAIN
+
     await query.edit_message_text(
         reply_markup=reply_markup,
         text=wide_message(f"Waiting for opponent\nOpponent: {game.opponent.user_name}"),
@@ -422,7 +454,9 @@ async def end_singleplayer(update: Update, context: ContextTypes.DEFAULT_TYPE) -
 
 async def goodbuy_sir(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     query = update.callback_query
-    message = context.user_data["bot_message"]
+    message = context.bot_data["bot_message"][query.message.chat_id]
+    # message = get_message(context, chat_id=query.message.chat_id)
+    print("I edited ", message)
     await context.bot.edit_message_text(
         chat_id=query.message.chat_id,
         message_id=message.message_id,
@@ -473,6 +507,7 @@ async def end_multiplayer(
         text=text, chat_id=chat_id, message_id=message_id
     )
     logger.info(f"{game_name} has ended, message rendered. winner: {winner}")
+    # await wanna_play_again(update, context)
     return ConversationHandler.END
 
 
@@ -502,11 +537,19 @@ def main() -> None:
                 ),
             ],
             CONTINUE_GAME_MULTIPLAYER: [
+                *[
+                    CallbackQueryHandler(
+                        game_multiplayer, pattern="^" + f"{r}{c}" + "$", block=False
+                    )
+                    for r in range(3)
+                    for c in range(3)
+                ],
                 CallbackQueryHandler(
-                    game_multiplayer, pattern="^" + f"{r}{c}" + "$", block=False
-                )
-                for r in range(3)
-                for c in range(3)
+                    start_multichoice, pattern="^" + str(91) + "$", block=False
+                ),
+                CallbackQueryHandler(
+                    goodbuy_sir, pattern="^" + str(92) + "$", block=False
+                ),
             ],
             CONTINUE_GAME_SINGLEPLAYER: [
                 CallbackQueryHandler(
@@ -517,10 +560,10 @@ def main() -> None:
             ],
             PLAY_AGAIN: [
                 CallbackQueryHandler(
-                    start_multichoice, pattern="^" + str(1) + "$", block=False
+                    start_multichoice, pattern="^" + str(91) + "$", block=False
                 ),
                 CallbackQueryHandler(
-                    goodbuy_sir, pattern="^" + str(2) + "$", block=False
+                    goodbuy_sir, pattern="^" + str(92) + "$", block=False
                 ),
             ],
         },

@@ -6,6 +6,7 @@
 
 ## How to run
 
+- clone the repository
 - `pip install .`
 - `TIC_TAC_TOE_TOKEN_TG=token app` (entry point) or `python -m tic_tac_toe.bot`
 
@@ -17,8 +18,9 @@
 - [x] Add bot logic
 - [x] Understand `python-telegram-bot` architecture (`update`, `context`)
 - [x] Add multiplayer
-- [ ] Refactor project (single main script, structured code)
+- [x] Refactor project (single main script, structured code)
 - [x] Make better exception hierarchy
+- [ ] Make use of marks
 - [ ] Add some description, annotations, docstrings
 - [ ] Make more interesting text
 - [ ] Linters

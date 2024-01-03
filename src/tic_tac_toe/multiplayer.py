@@ -53,15 +53,15 @@ class Multiplayer:
     """Connects two players and other magic"""
 
     def __init__(self) -> None:
-        self.players_queue: Queue[dict] = Queue()
-        self.waitroom = []
+        # better to be Queue, but it is harder to work with
+        self.players_queue: list[dict] = []
         self.games: dict[ChatId, Game] = {}
 
     @property
     def is_player_waiting(self):
-        if self.players_queue.qsize() >= 2:
+        if len(self.players_queue) >= 2:
             raise ValueError("Too many players waiting game, tinder somebody please")
-        return self.players_queue.qsize() != 0
+        return len(self.players_queue) != 0
 
     def register_player(self, **kwargs):
         # necessary keys to connect players
@@ -72,18 +72,16 @@ class Multiplayer:
         if kwargs["chat_id"] in self.games:
             raise CurrentGameError
 
-        if kwargs["chat_id"] in self.waitroom:  # how to make it simpler?
+        if kwargs["chat_id"] in self.players_queue:  # how to make it simpler?
             raise WaitRoomError
-        self.waitroom.append(kwargs["chat_id"])
 
-        self.players_queue.put(kwargs)
+        self.players_queue.append(kwargs)
 
     def register_pair(self) -> None:
-        if (self.players_queue.qsize()) < 2:
+        if len(self.players_queue) < 2:
             raise NotEnoughPlayersError("Not enough players")
-        player1_dict = self.players_queue.get_nowait()
-        player2_dict = self.players_queue.get_nowait()
-        [self.waitroom.pop(0) for _ in range(2)]
+        player1_dict = self.players_queue.pop(0)
+        player2_dict = self.players_queue.pop(0)
 
         gc = GameConductor()
         # TODO: change when need to use user mark preference
@@ -99,7 +97,6 @@ class Multiplayer:
         # two links for each player
         self.games[player1_dict["chat_id"]] = game
         self.games[player2_dict["chat_id"]] = game
-        # return game  # do I even need to return?
 
     def get_game(self, chat_id: ChatId) -> GamePersonalized:
         "Get personalized game by chat_id"
@@ -119,3 +116,22 @@ class Multiplayer:
         return GamePersonalized(
             game.chat_dict[chat_id], game.chat_dict[other_chat_id], game.game_conductor
         )
+
+    def is_this_player_in_waitlist(self, chat_id: ChatId) -> bool:
+        for player in self.players_queue:
+            if chat_id == player["chat_id"]:
+                return True
+        return False
+
+    def remove_player_from_queue(self, chat_id: ChatId) -> bool:
+        "Remove player from waitlist"
+        for elem in self.players_queue:
+            if elem["chat_id"] == chat_id:
+                self.players_queue.remove(elem)
+                return True
+        return False
+
+    def get_player_from_queue(self, chat_id: ChatId):
+        for elem in self.players_queue:
+            if elem["chat_id"] == chat_id:
+                return elem
