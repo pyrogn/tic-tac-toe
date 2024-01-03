@@ -28,5 +28,5 @@
 ## Ideas
 
 - Modify a game so you can rewrite or clear opponent's choice
-- Make a bot with unbeatable minimax strategy
+- (Done) Make a bot with unbeatable minimax strategy
 - Add inactivity checker (`context.job_queue.run_once`)

@@ -1,7 +1,11 @@
 from collections import deque
 from queue import Queue
 from typing import Any, Literal, NamedTuple
-from exceptions import CurrentGameError, NotEnoughPlayersError, WaitRoomError
+from tic_tac_toe.exceptions import (
+    CurrentGameError,
+    NotEnoughPlayersError,
+    WaitRoomError,
+)
 
 from tic_tac_toe.game import (
     DEFAULT_STATE,

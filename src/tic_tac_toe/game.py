@@ -5,7 +5,7 @@ from functools import partial
 from typing import Any, Callable, Final, Literal, NamedTuple, TypeAlias
 import random
 
-from exceptions import GameRulesException, InvalidMove
+from tic_tac_toe.exceptions import GameRulesException, InvalidMove
 
 FREE_SPACE: Final = "."
 CROSS: Final = "X"
@@ -166,28 +166,43 @@ def iter_through_cells(grid: Grid):
             grid[r][c]
 
 
-# def minimax_move_score(grid: Grid, is_myself: bool, mark: str) -> int:
-#     # grid = deepcopy(grid)
-#     # if n_empty_cells(grid) == 1:  # stop criterion
-#     for r in range(3):
-#         for c in range(3):
-#             if grid[r][c] == FREE_SPACE:
-#                 grid = deepcopy(grid)
-#                 set_cell(grid, (r, c), mark)
-#                 if is_game_over(grid):
-#                     winner = get_winner(grid)
-#                     if winner:
-#                         return 10 * (1 if is_myself else -1)
-#                     else:
-#                         return 0
+def minimax_move_score(grid: Grid, mark: str, max_score: int) -> int:
+    if is_game_over(grid):
+        winner = get_winner(grid)
+        if not winner:
+            return 0
+        elif winner == mark:
+            return 10
+        else:
+            return -10
 
-#     list_moves = []
-#     for r in range(3):
-#         for c in range(3):
-#             if grid[r][c] == FREE_SPACE:
-#                 grid = deepcopy(grid)
-#                 func = max if is_myself else min # what function?
-#                 list_moves.append(minimax_move_score(grid, is_myself=not is_myself, mark=get_opposite_mark(mark)))
-#     return func(list_moves)
+    best_score = -200
+    for r in range(3):
+        for c in range(3):
+            if grid[r][c] == FREE_SPACE:
+                if best_score >= max_score:  # leave early if found better score
+                    return best_score
+                set_cell(grid, (r, c), mark)
+                score = -minimax_move_score(
+                    grid, mark=get_opposite_mark(mark), max_score=-best_score
+                )
+                set_cell(grid, (r, c), FREE_SPACE)
+                if score > best_score:
+                    best_score = score
 
-# def find_optimal_move(grid: Grid, mark_to_move) -> Move:
+    return best_score
+
+
+def find_optimal_move(grid: Grid, mark: str) -> Move:
+    best_score, move = -200, (100, 100)
+    grid = deepcopy(grid)
+    for r in range(3):
+        for c in range(3):
+            if grid[r][c] == FREE_SPACE:
+                set_cell(grid, (r, c), mark)
+                score = -minimax_move_score(grid, get_opposite_mark(mark), -best_score)
+                set_cell(grid, (r, c), FREE_SPACE)
+                if score > best_score:
+                    best_score = score
+                    move = (r, c)
+    return move

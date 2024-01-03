@@ -1,5 +1,5 @@
 import pytest
-from exceptions import GameRulesException, InvalidMove
+from tic_tac_toe.exceptions import GameRulesException, InvalidMove
 
 from tic_tac_toe.game import (
     DEFAULT_STATE,

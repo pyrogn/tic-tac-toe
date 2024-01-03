@@ -6,7 +6,7 @@ from copy import deepcopy
 import logging
 from typing import Optional, Union
 import random
-from exceptions import (
+from tic_tac_toe.exceptions import (
     CurrentGameError,
     InvalidMove,
     NotEnoughPlayersError,
@@ -14,6 +14,7 @@ from exceptions import (
 )
 from tic_tac_toe.game import (
     DEFAULT_STATE,
+    find_optimal_move,
     get_default_state,
     Cell,
     Grid,
@@ -92,8 +93,6 @@ def generate_keyboard(state: Grid) -> list[list[InlineKeyboardButton]]:
 
 
 async def start_multichoice(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    # TODO: check if with this action user do not abandon the game or queue in multiplayer!!!
-
     if "bot_message" not in context.bot_data:
         context.bot_data["bot_message"] = {}
     keyboard = [
@@ -142,11 +141,24 @@ async def start_multichoice(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     return CHOICE_GAME_TYPE
 
 
+async def mark_choice(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    # TODO: make use of it
+    keyboard = [
+        [
+            InlineKeyboardButton(CROSS, callback_data="191"),
+            InlineKeyboardButton(ZERO, callback_data="192"),
+        ]
+    ]
+    query = update.callback_query
+    await query.edit_message_text(
+        "Which mark do you choose? Your choice might be changed under circumstances. So you'll be good anyway.",
+        reply_markup=InlineKeyboardMarkup(keyboard),
+    )
+
+
 async def wanna_play_again(
     update: Update, context: ContextTypes.DEFAULT_TYPE, chats_multiplayer=None
 ) -> int:
-    # TODO: parametrize for use of two players (chat_id and bot_message)
-    # store message in dictionary in bot_data
     keyboard = [
         [
             InlineKeyboardButton("Yeah! I'm feeling lucky!!", callback_data="91"),
@@ -166,11 +178,9 @@ async def wanna_play_again(
         return PLAY_AGAIN
     else:
         for chat_id in chats_multiplayer:
-            print("send message to", chat_id)
             message = await context.bot.send_message(
                 chat_id=chat_id, text=text, reply_markup=InlineKeyboardMarkup(keyboard)
             )
-            print("Printed ", message, " in ", chat_id)
             context.bot_data["bot_message"][chat_id] = message
 
 
@@ -204,7 +214,6 @@ async def start_singleplayer(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
 async def game_singleplayer(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Main processing of the game"""
-    # PLACE YOUR CODE HERE
     query = update.callback_query
     assert query, "query is None, not good..."
     coords_keyboard = query.data
@@ -213,11 +222,6 @@ async def game_singleplayer(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     # grid = context.user_data["keyboard_state"]
     move = int(coords_keyboard[0]), int(coords_keyboard[1])
     logger.info(f"player chose move {move}")
-
-    # if not is_move_legal(grid, move):
-    #     logger.info(f"move {move} from player is illegal")
-    #     # edit text to warn user or show pop up
-    #     return CONTINUE_GAME_SINGLEPLAYER
 
     handle = context.user_data["handle1"]
 
@@ -243,23 +247,24 @@ async def game_singleplayer(update: Update, context: ContextTypes.DEFAULT_TYPE) 
 
 async def bot_turn(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     query = update.callback_query
-    # print(update.callback_query)
     gc = context.user_data["GameConductor"]
     grid = gc.grid
-    move = random_available_move(grid)
+    # move = random_available_move(grid)
+    handle = context.user_data["handle2"]
+    move = find_optimal_move(grid, handle.mark)
     logger.info(f"bot chose move {move}")
 
     assert is_move_legal(grid, move), "Bot move is illegal"
 
-    handle = context.user_data["handle2"]
     handle(move)
     logger.info(f"bot made move {move}")
 
-    # write text that machine is thinking
-    sec_sleep = random.randint(1, 5) / 10
-    await asyncio.sleep(sec_sleep)
-    # write text that it is your turn with actual move
-    # while not is_valid: make move? I think just throw an error
+    # thinking simulation
+    # first moves are slow by computations
+    if n_empty_cells(gc.grid) < 8:
+        sec_sleep = random.randint(1, 5) / 10
+        await asyncio.sleep(sec_sleep)
+
     keyboard = generate_keyboard(gc.grid)
     reply_markup = InlineKeyboardMarkup(keyboard)
     await query.edit_message_text(
@@ -396,18 +401,12 @@ async def game_multiplayer(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         n_games = len(multiplayer.games)  # should be zero during testing
         logger.info(f"Game is ended, and removed. How many games left: {n_games}")
 
-        # id1 = get_message(context, game.myself.chat_id)
-        # id2 = get_message(context, game.opponent.chat_id)
         await wanna_play_again(
             update,
             context,
             chats_multiplayer=(game.myself.chat_id, game.opponent.chat_id),
         )
         return CONTINUE_GAME_MULTIPLAYER
-        # await query.edit_message_text()
-        # TODO: update and print options for two players
-        # return await wanna_play_again(update, context)
-        # return PLAY_AGAIN
 
     await query.edit_message_text(
         reply_markup=reply_markup,
@@ -456,7 +455,6 @@ async def goodbuy_sir(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int
     query = update.callback_query
     message = context.bot_data["bot_message"][query.message.chat_id]
     # message = get_message(context, chat_id=query.message.chat_id)
-    print("I edited ", message)
     await context.bot.edit_message_text(
         chat_id=query.message.chat_id,
         message_id=message.message_id,
@@ -471,7 +469,7 @@ async def end_multiplayer(
     chat_id,
     message_id,
     gc: GameConductor,
-) -> int:
+) -> None:
     """Returns `ConversationHandler.END`, which tells the
     ConversationHandler that the conversation is over.
     """
@@ -507,8 +505,7 @@ async def end_multiplayer(
         text=text, chat_id=chat_id, message_id=message_id
     )
     logger.info(f"{game_name} has ended, message rendered. winner: {winner}")
-    # await wanna_play_again(update, context)
-    return ConversationHandler.END
+    # return ConversationHandler.END
 
 
 def main() -> None:
@@ -525,7 +522,6 @@ def main() -> None:
     conv_handler = ConversationHandler(
         entry_points=[
             CommandHandler("start", start_multichoice, block=False),
-            # MessageHandler(filters.ALL, first_message),
         ],
         states={
             CHOICE_GAME_TYPE: [
@@ -568,8 +564,8 @@ def main() -> None:
             ],
         },
         fallbacks=[
+            # you might start over at any moment
             CommandHandler("start", start_multichoice, block=False),
-            # MessageHandler(filters.ALL, inplay_message),
         ],
         per_message=False,
         block=False,

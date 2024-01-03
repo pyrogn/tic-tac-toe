@@ -1,6 +1,6 @@
 import pytest
 import asyncio
-from exceptions import NotEnoughPlayersError
+from tic_tac_toe.exceptions import NotEnoughPlayersError
 
 # TODO: write tests when you will have understanding with your API
 
