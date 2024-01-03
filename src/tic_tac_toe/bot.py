@@ -1,6 +1,7 @@
 """
 Bot for playing tic tac toe game with multiple CallbackQueryHandlers.
 """
+from ast import parse
 import asyncio
 from copy import deepcopy
 import logging
@@ -84,6 +85,12 @@ multiplayer = Multiplayer()
 games: list[Game] = []
 games_fastkey: dict[ChatId, Game] = {}
 
+
+async def rules(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.message
+    rules = r"""*1\. You play 1 step at a time
+2\. X has the right of first move*"""
+    await query.reply_text(text=rules, parse_mode="MarkdownV2")
 
 def generate_keyboard(state: Grid) -> list[list[InlineKeyboardButton]]:
     """Generate tic tac toe keyboard 3x3 (telegram buttons)"""
@@ -243,7 +250,6 @@ async def game_singleplayer(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     coords_keyboard = query.data
     assert coords_keyboard
 
-    await query.answer()
     # grid = context.user_data["keyboard_state"]
     move = int(coords_keyboard[0]), int(coords_keyboard[1])
     logger.info(f"player chose move {move}")
@@ -264,6 +270,7 @@ async def game_singleplayer(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         reply_markup=reply_markup, text=wide_message("Opponent's turn")
     )
     logger.info(f"Player made move {move}, message rendered")
+    await query.answer()
 
     if gc.is_game_over:
         return await end_singleplayer(update, context)
@@ -382,7 +389,6 @@ async def game_multiplayer(update: Update, context: ContextTypes.DEFAULT_TYPE) -
     """Main processing of the game"""
 
     query = update.callback_query
-    await query.answer()
     assert query, "query is None, not good..."
     coords_keyboard = query.data
     assert coords_keyboard, "No data from user"
@@ -411,6 +417,7 @@ async def game_multiplayer(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         )  # add actual text
         logger.info(f"{game_name}: player tried to make illegal move")
         return CONTINUE_GAME_MULTIPLAYER
+    await query.answer()
 
     logger.info(f"Player made move {move}")
 
@@ -550,6 +557,7 @@ def main() -> None:
     conv_handler = ConversationHandler(
         entry_points=[
             CommandHandler("start", start_multichoice, block=False),
+            CommandHandler("rules", rules, block=False),
         ],
         states={
             CHOICE_GAME_TYPE: [
