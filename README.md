@@ -22,12 +22,12 @@
 - [x] Make better exception hierarchy
 - [x] Make use of marks (singleplayer only)
 - [ ] Add some description, annotations, docstrings
-- [ ] Make code more readable 😂
+- [ ] Make code more readable
 - [ ] Make more interesting text
 - [ ] Linters
 
 ## Ideas
 
-- Modify a game so you can rewrite or clear opponent's choice
+- Modify a game so you can rewrite or clear opponent's choice (crazy actually, but no need to change bot.py, only game.py)
 - (Done) Make a bot with unbeatable minimax strategy
-- Add inactivity checker (`context.job_queue.run_once`)
+- [(It is complicated)](https://github.com/python-telegram-bot/python-telegram-bot/issues/1907) Add inactivity checker (`context.job_queue.run_once`)
