@@ -20,8 +20,9 @@
 - [x] Add multiplayer
 - [x] Refactor project (single main script, structured code)
 - [x] Make better exception hierarchy
-- [ ] Make use of marks
+- [x] Make use of marks (singleplayer only)
 - [ ] Add some description, annotations, docstrings
+- [ ] Make code more readable 😂
 - [ ] Make more interesting text
 - [ ] Linters
 

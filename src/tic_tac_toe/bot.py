@@ -76,7 +76,8 @@ assert TOKEN, "Token not found in env vars"
     CONTINUE_GAME_SINGLEPLAYER,
     CONTINUE_GAME_MULTIPLAYER,
     PLAY_AGAIN,
-) = range(4)
+    MARK_CHOICE,
+) = range(5)
 
 
 multiplayer = Multiplayer()
@@ -104,11 +105,12 @@ async def start_multichoice(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     if update.message:  # if message (/start), then send a new message
         make_message = update.message.reply_text
     elif update.callback_query:  # if trigger originates from callback, edit message
+        await update.callback_query.answer()
         make_message = update.callback_query.message.edit_text
     else:
         raise ValueError("Something wrong with Updater")
     message = await make_message(
-        text="Press what type of game you want to play",
+        text=wide_message("Press what type of game you want to play"),
         reply_markup=InlineKeyboardMarkup(keyboard),
     )
 
@@ -142,18 +144,40 @@ async def start_multichoice(update: Update, context: ContextTypes.DEFAULT_TYPE) 
 
 
 async def mark_choice(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    # TODO: make use of it
-    keyboard = [
-        [
-            InlineKeyboardButton(CROSS, callback_data="191"),
-            InlineKeyboardButton(ZERO, callback_data="192"),
-        ]
-    ]
     query = update.callback_query
-    await query.edit_message_text(
-        "Which mark do you choose? Your choice might be changed under circumstances. So you'll be good anyway.",
-        reply_markup=InlineKeyboardMarkup(keyboard),
+    await query.answer()
+    mark_choice = query.data
+    if mark_choice == "1":
+        mark = CROSS
+    elif mark_choice == "2":
+        mark = ZERO
+    elif mark_choice == "3":
+        mark = random.choice([CROSS, ZERO])
+    else:
+        raise ValueError(f"Mark isn't identified: {mark_choice}")
+
+    context.user_data["keyboard_state"] = get_default_state()
+    keyboard = generate_keyboard(context.user_data["keyboard_state"])
+    reply_markup = InlineKeyboardMarkup(keyboard)
+
+    context.user_data["GameConductor"] = GameConductor()
+    context.user_data["handle1"] = context.user_data["GameConductor"].get_handler(mark)
+    context.user_data["handle2"] = context.user_data["GameConductor"].get_handler(
+        what_is_left=True
     )
+    if context.user_data["handle1"].is_my_turn():
+        text=f"It is your turn. Put {context.user_data["handle1"].mark} it down."
+    else:
+        text="Waiting for a bot to make a move"
+    await query.edit_message_text(
+        text=wide_message(text),
+        reply_markup=reply_markup,
+    )
+    if not context.user_data["handle1"].is_my_turn():
+        await bot_turn(update, context)
+
+    logger.info(f"game {context.user_data['game']} has begun, keyboard rendered")
+    return CONTINUE_GAME_SINGLEPLAYER
 
 
 async def wanna_play_again(
@@ -186,8 +210,22 @@ async def wanna_play_again(
 
 async def start_singleplayer(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Send message on `/start`."""
+    keyboard = [
+        [
+            InlineKeyboardButton(CROSS, callback_data="1"),
+            InlineKeyboardButton(ZERO, callback_data="2"),
+            InlineKeyboardButton("🤪", callback_data="3"),
+        ]
+    ]
 
     query = update.callback_query
+    await query.edit_message_text(
+        wide_message("Which mark do you choose?"),
+        reply_markup=InlineKeyboardMarkup(keyboard),
+    )
+
+    query = update.callback_query
+    await query.answer()
     user = query.from_user
     context.user_data["game"] = f"{user.username}-bot"
     logger.info(
@@ -195,21 +233,7 @@ async def start_singleplayer(update: Update, context: ContextTypes.DEFAULT_TYPE)
         f"(@{user.username}) has joined"
     )
 
-    context.user_data["keyboard_state"] = get_default_state()
-    keyboard = generate_keyboard(context.user_data["keyboard_state"])
-    reply_markup = InlineKeyboardMarkup(keyboard)
-
-    context.user_data["GameConductor"] = GameConductor()
-    context.user_data["handle1"] = context.user_data["GameConductor"].get_handler(CROSS)
-    context.user_data["handle2"] = context.user_data["GameConductor"].get_handler(ZERO)
-
-    await query.edit_message_text(
-        text=wide_message("X (your) turn! Please, put X to the free place"),
-        reply_markup=reply_markup,
-    )
-
-    logger.info(f"game {context.user_data['game']} has begun, keyboard rendered")
-    return CONTINUE_GAME_SINGLEPLAYER
+    return MARK_CHOICE
 
 
 async def game_singleplayer(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -219,6 +243,7 @@ async def game_singleplayer(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     coords_keyboard = query.data
     assert coords_keyboard
 
+    await query.answer()
     # grid = context.user_data["keyboard_state"]
     move = int(coords_keyboard[0]), int(coords_keyboard[1])
     logger.info(f"player chose move {move}")
@@ -282,6 +307,7 @@ async def start_multiplayer(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     # likely unsafe with race conditions
 
     query = update.callback_query
+    await query.answer()
     assert query.message, "How come no message?"
     user = query.from_user
     assert user, "User is unknown to this universe"
@@ -356,6 +382,7 @@ async def game_multiplayer(update: Update, context: ContextTypes.DEFAULT_TYPE) -
     """Main processing of the game"""
 
     query = update.callback_query
+    await query.answer()
     assert query, "query is None, not good..."
     coords_keyboard = query.data
     assert coords_keyboard, "No data from user"
@@ -453,6 +480,7 @@ async def end_singleplayer(update: Update, context: ContextTypes.DEFAULT_TYPE) -
 
 async def goodbuy_sir(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     query = update.callback_query
+    await query.answer()
     message = context.bot_data["bot_message"][query.message.chat_id]
     # message = get_message(context, chat_id=query.message.chat_id)
     await context.bot.edit_message_text(
@@ -531,6 +559,10 @@ def main() -> None:
                 CallbackQueryHandler(
                     start_multiplayer, pattern="^" + str(2) + "$", block=False
                 ),
+            ],
+            MARK_CHOICE: [
+                CallbackQueryHandler(mark_choice, pattern="^" + str(i) + "$")
+                for i in (1, 2, 3)
             ],
             CONTINUE_GAME_MULTIPLAYER: [
                 *[
