@@ -60,8 +60,8 @@ class Multiplayer:
     """
 
     def __init__(self) -> None:
-        # better and more efficient to be Queue, but it is harder to work with (API)
-        # but queue won't go higher than 2 players
+        # better and more efficient to be Queue, but it is harder to work with
+        # anyway queue won't store more than 2 players
         self.players_queue: list[dict] = []
         self.games: dict[ChatId, Game] = {}
 
@@ -69,7 +69,7 @@ class Multiplayer:
     def is_player_waiting(self):
         """Check if somebody is already in the queue, waiting for a game"""
         if len(self.players_queue) >= 2:
-            raise ValueError("Too many players waiting game, tinder somebody please")
+            raise ValueError("Too many players wait for game, tinder somebody please")
         return len(self.players_queue) != 0
 
     def register_player(self, **kwargs):
@@ -135,6 +135,8 @@ class Multiplayer:
             game.chat_dict[chat_id], game.chat_dict[other_chat_id], game.game_conductor
         )
 
+    # I don't know what to do with it, looks like a candidate for
+    # a new class PlayerQueue with these methods
     def is_this_player_in_queue(self, chat_id: ChatId) -> bool:
         "Check if the player is already in the queue"
         for player in self.players_queue:
