@@ -1,6 +1,8 @@
 """Helpers for main code of a bot.
 
-This includes formatting and common operations with data strctures"""
+This includes formatting and common operations with data strctures.
+And some text
+"""
 
 from telegram import User
 from telegram.ext import (
@@ -8,6 +10,10 @@ from telegram.ext import (
 )
 
 from tic_tac_toe.multiplayer import ChatId
+
+GAME_RULES = r"""*1\. You play 1 step at a time
+2\. X plays first
+3\. Player who joined multiplayer before an opponent plays first as X*"""
 
 
 def wide_message(msg):

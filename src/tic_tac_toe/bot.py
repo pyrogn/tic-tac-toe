@@ -1,11 +1,12 @@
 """
 Telegram bot for playing tic tac toe game.
-There are implementation of singleplayer and multiplayer
+There are implementations of singleplayer and multiplayer
 """
 import asyncio
 import logging
 import os
 import random
+from typing import Collection
 from warnings import filterwarnings
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
@@ -18,8 +19,9 @@ from telegram.ext import (
 )
 from telegram.warnings import PTBUserWarning
 
+from tic_tac_toe.bot_helpers import GAME_RULES, get_full_user_name, wide_message
 from tic_tac_toe.exceptions import (
-    InvalidMove,
+    InvalidMoveError,
     NotEnoughPlayersError,
 )
 from tic_tac_toe.game import (
@@ -32,8 +34,7 @@ from tic_tac_toe.game import (
     is_move_legal,
     n_empty_cells,
 )
-from tic_tac_toe.multiplayer import ChatId, Game, Multiplayer
-from tic_tac_toe.notifications import get_full_user_name, wide_message
+from tic_tac_toe.multiplayer import ChatId, Multiplayer
 
 # get token using BotFather
 TOKEN = os.getenv("TIC_TAC_TOE_TOKEN_TG")  # I put it in zsh config
@@ -60,19 +61,14 @@ logging.getLogger("httpx").setLevel(logging.WARNING)
 
 logger = logging.getLogger(__name__)
 
-
+# Initialize multiplayer
 multiplayer = Multiplayer()
-games: list[Game] = []
-games_fastkey: dict[ChatId, Game] = {}
 
 
 async def rules(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Send game rules on /rules handle"""
     query = update.message
-    rules = r"""*\
-1\. You play 1 step at a time
-2\. X plays first
-3\. Player who joined multiplayer before an opponent plays first as X*"""
-    await query.reply_text(text=rules, parse_mode="MarkdownV2")
+    await query.reply_text(text=GAME_RULES, parse_mode="MarkdownV2")
 
 
 def generate_keyboard(state: Grid) -> list[list[InlineKeyboardButton]]:
@@ -84,6 +80,10 @@ def generate_keyboard(state: Grid) -> list[list[InlineKeyboardButton]]:
 
 
 async def start_multichoice(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Send message on `/start`.
+
+    User can choose singleplayer or multiplayer game mode
+    """
     if "bot_message" not in context.bot_data:
         context.bot_data["bot_message"] = {}
     keyboard = [
@@ -92,7 +92,7 @@ async def start_multichoice(update: Update, context: ContextTypes.DEFAULT_TYPE) 
             InlineKeyboardButton("Multiplayer", callback_data="2"),
         ]
     ]
-    if update.message:  # if message (/start), then send a new message
+    if update.message:  # if update is message (/start), then send a new message
         make_message = update.message.reply_text
     elif update.callback_query:  # if trigger originates from callback, edit message
         await update.callback_query.answer()
@@ -104,7 +104,7 @@ async def start_multichoice(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         reply_markup=InlineKeyboardMarkup(keyboard),
     )
 
-    if multiplayer.is_this_player_in_waitlist(message.chat_id):
+    if multiplayer.is_this_player_in_queue(message.chat_id):
         player_last_game_info = multiplayer.get_player_from_queue(message.chat_id)
         multiplayer.remove_player_from_queue(message.chat_id)
         # bot_message_id = get_message(context, message.chat_id)
@@ -134,8 +134,10 @@ async def start_multichoice(update: Update, context: ContextTypes.DEFAULT_TYPE) 
 
 
 async def mark_choice(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Process mark choice from user in singleplayer game and show InlineKeyboard"""
     query = update.callback_query
     await query.answer()
+
     mark_choice = query.data
     if mark_choice == "1":
         mark = CROSS
@@ -151,8 +153,8 @@ async def mark_choice(update: Update, context: ContextTypes.DEFAULT_TYPE):
     reply_markup = InlineKeyboardMarkup(keyboard)
 
     context.user_data["GameConductor"] = GameConductor()
-    context.user_data["handle1"] = context.user_data["GameConductor"].get_handler(mark)
-    context.user_data["handle2"] = context.user_data["GameConductor"].get_handler(
+    context.user_data["handle1"] = context.user_data["GameConductor"].get_handle(mark)
+    context.user_data["handle2"] = context.user_data["GameConductor"].get_handle(
         what_is_left=True
     )
     my_mark = context.user_data["handle1"].mark
@@ -172,8 +174,16 @@ async def mark_choice(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def wanna_play_again(
-    update: Update, context: ContextTypes.DEFAULT_TYPE, chats_multiplayer=None
-) -> int:
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE,
+    chats_multiplayer: Collection[ChatId] | None = None,
+) -> int | None:
+    """Present to user InlineKeyboard with choice to start a new game.
+
+    Arguments:
+        chats_multiplayers: if None, then make a reply in current conversation
+            if not None, then send messages to these chat ids
+    """
     keyboard = [
         [
             InlineKeyboardButton("Yeah! I'm feeling lucky!!", callback_data="91"),
@@ -181,7 +191,7 @@ async def wanna_play_again(
         ]
     ]
     text = "Do you want to play again?"
-    if not chats_multiplayer:
+    if not chats_multiplayer:  # singleplayer
         query = update.callback_query
         message = await query.message.reply_text(
             text=text,
@@ -191,16 +201,21 @@ async def wanna_play_again(
 
         context.bot_data["bot_message"][message.chat_id] = message
         return PLAY_AGAIN
-    else:
-        for chat_id in chats_multiplayer:
-            message = await context.bot.send_message(
-                chat_id=chat_id, text=text, reply_markup=InlineKeyboardMarkup(keyboard)
-            )
-            context.bot_data["bot_message"][chat_id] = message
+
+    # multiplayer
+    for chat_id in chats_multiplayer:
+        message = await context.bot.send_message(
+            chat_id=chat_id, text=text, reply_markup=InlineKeyboardMarkup(keyboard)
+        )
+        context.bot_data["bot_message"][chat_id] = message
 
 
 async def start_singleplayer(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """Send message on `/start`."""
+    """Start singleplayer game and ask user about mark choice using InlineKeyboard."""
+
+    query = update.callback_query
+    await query.answer()
+
     keyboard = [
         [
             InlineKeyboardButton(CROSS, callback_data="1"),
@@ -208,21 +223,14 @@ async def start_singleplayer(update: Update, context: ContextTypes.DEFAULT_TYPE)
             InlineKeyboardButton("🤪", callback_data="3"),
         ]
     ]
-
-    query = update.callback_query
     await query.edit_message_text(
         wide_message("Which mark do you choose?"),
         reply_markup=InlineKeyboardMarkup(keyboard),
     )
 
-    query = update.callback_query
-    await query.answer()
-    user = query.from_user
-    context.user_data["game"] = f"{user.username}-bot"
-    logger.info(
-        f"Player {user.first_name or ''} {user.last_name or ''} "
-        f"(@{user.username}) has joined"
-    )
+    user = get_full_user_name(query.from_user)
+    context.user_data["game"] = f"{user}-bot"
+    logger.info(f"Player {user}) want to start multiplayer game")
 
     return MARK_CHOICE
 
@@ -234,7 +242,6 @@ async def game_singleplayer(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     coords_keyboard = query.data
     assert coords_keyboard
 
-    # grid = context.user_data["keyboard_state"]
     move = int(coords_keyboard[0]), int(coords_keyboard[1])
     logger.info(f"player chose move {move}")
 
@@ -242,7 +249,7 @@ async def game_singleplayer(update: Update, context: ContextTypes.DEFAULT_TYPE) 
 
     try:
         handle(move)
-    except InvalidMove as f:
+    except InvalidMoveError as f:
         await query.answer(text=f"Illegal move: {str(f)}", show_alert=True)
         logger.info("player tried to make illegal move")
         return CONTINUE_GAME_SINGLEPLAYER
@@ -262,6 +269,7 @@ async def game_singleplayer(update: Update, context: ContextTypes.DEFAULT_TYPE) 
 
 
 async def bot_turn(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Bot makes a move in singleplayer."""
     query = update.callback_query
     gc = context.user_data["GameConductor"]
     grid = gc.grid
@@ -294,8 +302,8 @@ async def bot_turn(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
 
 
 async def start_multiplayer(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """Send message on `/start`."""
-    # likely unsafe with race conditions
+    """Start multiplayer game"""
+    # likely unsafe with race conditions, but this is another issue
 
     query = update.callback_query
     await query.answer()
@@ -395,7 +403,7 @@ async def game_multiplayer(update: Update, context: ContextTypes.DEFAULT_TYPE) -
 
     try:
         handle(move)
-    except InvalidMove as f:
+    except InvalidMoveError as f:
         await query.answer(
             text=f"Illegal move: {str(f)}", show_alert=True
         )  # add actual text
@@ -472,6 +480,7 @@ async def end_singleplayer(update: Update, context: ContextTypes.DEFAULT_TYPE) -
 async def goodbuy_sir(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     query = update.callback_query
     await query.answer()
+
     message = context.bot_data["bot_message"][query.message.chat_id]
     # message = get_message(context, chat_id=query.message.chat_id)
     await context.bot.edit_message_text(
@@ -489,18 +498,10 @@ async def end_multiplayer(
     message_id,
     gc: GameConductor,
 ) -> None:
-    """Returns `ConversationHandler.END`, which tells the
-    ConversationHandler that the conversation is over.
-    """
-    # reset state to default so you can play again with /start
-    # context.user_data["keyboard_state"] = get_default_state()
-
-    # make it work, remove keyboard if someone is won
+    """Edit last message of 2 chats with grid as string and result."""
     game = multiplayer.get_game(chat_id)
     game_name = f"{game.myself.user_name} vs {game.opponent.user_name}"
     logger.info(f"{game_name} has ended")
-    query = update.callback_query
-    assert query, "Query is None. Message was deleted?"
 
     winner = gc.result or "Draw"
     emoji = "\N{Face with Finger Covering Closed Lips}"
@@ -519,25 +520,17 @@ async def end_multiplayer(
         + emoji
         + f"\nWinner in this game: ({winner}).\nThanks for playing"
     )
-    await query.answer()
     await context.bot.edit_message_text(
         text=text, chat_id=chat_id, message_id=message_id
     )
     logger.info(f"{game_name} has ended, message rendered. winner: {winner}")
-    # return ConversationHandler.END
 
 
 def main() -> None:
     """Run the bot"""
-    # Create the Application and pass it your bot's token.
     application = Application.builder().token(TOKEN).build()
 
-    # Setup conversation handler with the states CONTINUE_GAME and FINISH_GAME
-    # Use the pattern parameter to pass CallbackQueries with specific
-    # data pattern to the corresponding handlers.
-    # ^ means "start of line/string"
-    # $ means "end of line/string"
-    # So ^ABC$ will only allow 'ABC'
+    # block is False so we don't get blocked while sending a message
     conv_handler = ConversationHandler(
         entry_points=[
             CommandHandler("start", start_multichoice, block=False),
@@ -553,7 +546,9 @@ def main() -> None:
                 ),
             ],
             MARK_CHOICE: [
-                CallbackQueryHandler(mark_choice, pattern="^" + str(i) + "$")
+                CallbackQueryHandler(
+                    mark_choice, pattern="^" + str(i) + "$", block=False
+                )
                 for i in (1, 2, 3)
             ],
             CONTINUE_GAME_MULTIPLAYER: [
@@ -588,7 +583,7 @@ def main() -> None:
             ],
         },
         fallbacks=[
-            # you might start over at any moment
+            # you might start over at any moment, dropping current game
             CommandHandler("start", start_multichoice, block=False),
         ],
         per_message=False,

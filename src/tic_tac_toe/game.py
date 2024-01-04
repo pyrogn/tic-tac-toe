@@ -1,13 +1,13 @@
-"""Tic tac toe game engine with 3x3 grid and quite standard rules.
+"""Tic Tac Toe game engine with 3x3 grid and quite standard rules.
 
-Definition and functions"""
+Definition and functions. Simple bot engine (random and minimax)
+"""
 
 import random
 from copy import deepcopy
-from functools import partial
-from typing import Final, Literal, Protocol, TypeAlias
+from typing import Final, Literal, TypeAlias
 
-from tic_tac_toe.exceptions import GameRulesError, InvalidMove
+from tic_tac_toe.exceptions import GameRulesError, InvalidMoveError
 
 FREE_SPACE: Final = "."
 CROSS: Final = "X"
@@ -20,12 +20,13 @@ Grid: TypeAlias = list[list[Mark]]
 
 # CONFUSED: don't know how to write type for it
 # Final[List[FREE_SPACE]] doesn't work
+# Pylance: (constant) DEFAULT_STATE: list[list[str]]
 DEFAULT_STATE = [[FREE_SPACE for _ in range(3)] for _ in range(3)]
 
 
 def get_default_state() -> Grid:
     """Helper function to get default state of the game"""
-    return deepcopy(DEFAULT_STATE)
+    return deepcopy(DEFAULT_STATE)  # type: ignore
 
 
 def select_cell(grid: Grid, move: Move) -> Mark:
@@ -58,12 +59,13 @@ def make_move(grid: Grid, move: Move, mark) -> None:
     """Put move into the grid.
 
     Raises:
-        InvalidMove: if this cell is already taken"""
+        InvalidMove: if this cell is already taken
+    """
     cell = select_cell(grid, move)
     if cell == FREE_SPACE:
         set_cell(grid, move, mark)
     else:
-        raise InvalidMove(f"this cell is not free, but {cell}")
+        raise InvalidMoveError(f"this cell is not free, but {cell}")
 
 
 def get_winner(grid: Grid) -> Mark | None:
@@ -101,21 +103,38 @@ def random_available_move(grid: Grid) -> Move:
     return random.choice(available_moves)
 
 
-class HandleForPlayer(Protocol):
+class HandleForPlayer:
+    """Handle for player to play the game safely.
+
+    Attributes:
+        mark: mark of the player (X or O)
+        _game: GameConductor instance. Shouldn't be accessed by player (imagine that)
+    Methods:
+        is_my_turn() -> (bool): is this player's turn
+    Magic methods:
+        __call__(move) -> None: call this handle to make a move in a board
+    Example:
+        handle((1, 2)) # put a move in the grid
+        handle.mark # get a mark
+        handle.is_my_turn() # understand if it is player's turn
+    """
+
     mark: Mark
+    _game: "GameConductor"
+
+    def __init__(self, game: "GameConductor", mark: Mark) -> None:
+        self._game = game
+        self.mark: Mark = mark
 
     def __call__(self, move: Move) -> None:
-        ...
+        self._game.full_handle(move, self.mark)
 
     def is_my_turn(self) -> bool:
-        ...
+        return self._game.current_move == self.mark
 
 
 class GameConductor:
-    """Conductor
-    Game Rules:
-    X has the first move
-    """
+    """Game engine for tic tac toe"""
 
     def __init__(self):
         self.grid: Grid = get_default_state()
@@ -123,17 +142,23 @@ class GameConductor:
         self.current_move: Mark = CROSS  # first move
         self.is_game_over: bool = False
 
-    def get_handler(
+    def get_handle(
         self,
         mark: Mark | None = None,
         what_is_left: bool = False,
     ) -> HandleForPlayer:
-        """You just call returned function with coordinates"""
+        """Get handle for playing in this instance of a game.
+
+        Attributes:
+            mark: choose your preferred mark
+            what_is_left: you don't have preference in marks, get anything
+        """
         if mark and mark not in (CROSS, ZERO):
             raise ValueError(f"This mark {mark} is unknown")
 
-        # some logic is still unclear
-        # TODO: think about it
+        # if you can take anything and there are two free mark, choose CROSS
+        # if you have no preference, take what is left
+        # else get exception to the face for being too assertive
         if what_is_left and len(self._available_marks) == 2:
             mark = CROSS
         elif not mark or what_is_left:
@@ -142,15 +167,18 @@ class GameConductor:
         try:
             self._available_marks.remove(mark)
         except KeyError:
-            raise KeyError("This mark is already taken for this game instance")
-
-        handle = partial(self.full_handle, mark=mark)
+            raise GameRulesError("This mark is already taken for this game instance")
 
         # full dynamism (Pylance is crazy)
-        # but I really like this way
-        # CONFUSED: is there a better way to create a handle for player?
-        handle.is_my_turn = lambda: self.current_move == mark
-        handle.mark = mark
+        # but I like this way
+        # CONFUSED: is there a better way to create a such handle for player?
+
+        # handle = partial(self.full_handle, mark=mark)
+        # handle.is_my_turn = lambda: self.current_move == mark
+        # handle.mark = mark
+
+        # attempt with explicit class
+        handle = HandleForPlayer(self, mark)
 
         return handle
 
@@ -165,7 +193,7 @@ class GameConductor:
         if self.is_game_over:
             raise GameRulesError("Game has ended, no more moves!")
         if self.current_move != mark:
-            raise InvalidMove(
+            raise InvalidMoveError(
                 "Now it is the move of an opponent, keep calm and drink cool cola"
             )
 
@@ -187,14 +215,9 @@ def get_opposite_mark(mark: Mark) -> Mark:
     return ZERO if mark == CROSS else CROSS
 
 
-def iter_through_cells(grid: Grid):
-    for r in range(2):
-        for c in range(2):
-            grid[r][c]
-
-
 def minimax_move_score(grid: Grid, mark: Mark, max_score: int) -> int:
-    if is_game_over(grid):
+    """Get minimax game score for the grid and mark move"""
+    if is_game_over(grid):  # end condition
         winner = get_winner(grid)
         if not winner:  # draw
             return 0
@@ -220,6 +243,8 @@ def minimax_move_score(grid: Grid, mark: Mark, max_score: int) -> int:
 
 
 def find_optimal_move(grid: Grid, mark: Mark) -> Move:
+    """Get optimal move based on minimax strategy"""
+    # if move hasn't changed, we are in trouble, but it shouln't happen
     best_score, move = -200, (100, 100)
     grid = deepcopy(grid)
     for r in range(3):

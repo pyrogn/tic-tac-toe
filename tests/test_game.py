@@ -1,6 +1,6 @@
 """Tests for game engine and different helpers."""
 import pytest
-from tic_tac_toe.exceptions import GameRulesError, InvalidMove
+from tic_tac_toe.exceptions import GameRulesError, InvalidMoveError
 from tic_tac_toe.game import (
     CROSS,
     FREE_SPACE,
@@ -19,6 +19,7 @@ from tic_tac_toe.game import (
 )
 
 
+# grid examples
 @pytest.fixture()
 def grid1():
     return [
@@ -124,14 +125,16 @@ def test_random_choice():
 def test_game_conductor1():
     """One game simulation (others I don't want to write for now)"""
     gc = GameConductor()
-    handle1 = gc.get_handler(CROSS)
-    handle2 = gc.get_handler()  # get zero that is left
+    handle1 = gc.get_handle(CROSS)
+    handle2 = gc.get_handle()  # get zero that is left
 
     handle1((0, 1))
     assert handle1.is_my_turn() is False
     assert handle2.is_my_turn() is True
 
-    with pytest.raises(InvalidMove, match=r".*Now it is the move of an opponent.*"):
+    with pytest.raises(
+        InvalidMoveError, match=r".*Now it is the move of an opponent.*"
+    ):
         handle1((0, 1))
     assert n_empty_cells(gc.grid) == 8
     assert gc.current_move == ZERO
@@ -140,7 +143,7 @@ def test_game_conductor1():
     assert n_empty_cells(gc.grid) == 7
     assert gc.current_move == CROSS
 
-    with pytest.raises(InvalidMove, match=r".*this cell is not free.*"):
+    with pytest.raises(InvalidMoveError, match=r".*this cell is not free.*"):
         handle1((0, 0))
     assert n_empty_cells(gc.grid) == 7
     assert gc.current_move == CROSS
@@ -161,12 +164,12 @@ def test_opposite_mark():
     assert get_opposite_mark(CROSS) == ZERO
     assert get_opposite_mark(ZERO) == CROSS
     with pytest.raises(ValueError):
-        get_opposite_mark("some bogus mark")
+        get_opposite_mark("some bogus mark")  # type: ignore
 
 
 def test_get_mark():
     gc = GameConductor()
-    handle1 = gc.get_handler(CROSS, what_is_left=True)
-    handle2 = gc.get_handler(CROSS, what_is_left=True)
+    handle1 = gc.get_handle(CROSS, what_is_left=True)
+    handle2 = gc.get_handle(CROSS, what_is_left=True)
     assert handle1.is_my_turn() is True
     assert handle2.is_my_turn() is False

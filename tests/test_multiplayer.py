@@ -5,6 +5,7 @@ from tic_tac_toe.multiplayer import GamePersonalized, Multiplayer
 
 
 def test_startup_multiplayer():
+    """Test match creation and pairing players from queue"""
     multiplayer = Multiplayer()
     multiplayer.register_player(chat_id=1, message_id=3, user_name="1")
     assert len(multiplayer.games) == 0

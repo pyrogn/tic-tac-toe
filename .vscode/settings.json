@@ -6,7 +6,8 @@
     "**/.pytest_cache": true,
     "**/.pytest_cache.*": true,
     "**/build": true,
-    "**/build.*": true
+    "**/build.*": true,
+    ".ruff_cache": true
   },
   "python.analysis.typeCheckingMode": "basic",
   "python.analysis.autoImportCompletions": true

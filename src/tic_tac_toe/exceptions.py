@@ -1,11 +1,11 @@
-"""Custom exceptions for a bot."""
+"""Custom exceptions for a bot and a game."""
 
 
 class TicTacToeException(Exception):
     "General exception for the game"
 
 
-class InvalidMove(TicTacToeException):
+class InvalidMoveError(TicTacToeException):
     "Invalid move"
 
 
