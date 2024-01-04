@@ -82,7 +82,7 @@ class Multiplayer:
         if kwargs["chat_id"] in self.games:
             raise CurrentGameError
 
-        if kwargs["chat_id"] in self.players_queue:  # how to make it simpler?
+        if kwargs["chat_id"] in self.players_queue:
             raise WaitRoomError
 
         self.players_queue.append(kwargs)

@@ -21,11 +21,12 @@ Your options:
 
 1. It uses `ConversationHandler` for all messages
 2. For singleplayer it is easier, because bot always reacts to user, and there is a path from `start_multichoice` to `wanna_play` in ConversationHandler
-3. But for multiplayer you have to receive update from 1 user and update something (message with inline keyboard) for 2 users. Workflow becomes more complicated and a bit hacky.
+3. But for multiplayer you have to receive update from 1 user and update something (message with inline keyboard) for 2 users. So we need shared structures that defined in `multiplayer.py`. Workflow becomes more complicated and a bit hacky.
    1. To connect users you put them in the queue.
    2. If two users are in the queue, you create a pair and a new game. Messages are updated for two users.
-   3. On some update edit messages for two users.
-   4. From beginning until the game result bot edits the same message to create an impression of animation, even in different stages (select game, select mark, game start, game result).
+   3. On any update you edit messages for two users.
+   4. From beginning until the game ends bot edits the same message to create an impression of animation, even in different stages (select game, select mark, game start, game result).
+4. Bot will edit message with current running game if you decide to start abruptly a new game using command `/start`, dropping the old one. This way chat is cleaner and less ways to screw things up.
 
 ## How to run
 
@@ -40,7 +41,7 @@ States of ConversationHandler aren't shown, but hopefully they are not so far aw
 
 <img src="./art/diagram.jpg" width="400"/>
 
-## What have I learned?
+## What I have learned
 
 - Refactoring from time to time is useful, because it simplifies your work on another parts.
 - Get a bit familiar with Telegram API and `python-telegram-bot` API.
@@ -65,8 +66,8 @@ States of ConversationHandler aren't shown, but hopefully they are not so far aw
 - [x] Add some description, annotations, docstrings
 - [x] Make code more readable
 - [x] Linters
-- [ ] Create more interesting text
-- [ ] Maybe a bit better log messages and tests
+- [x] Create more interesting text (good enough, constant)
+- [x] Maybe a bit better log messages and tests
 
 ## Ideas
 

@@ -110,7 +110,7 @@ def test_moves(grid1, grid2):
 
 def test_random_choice():
     grid = get_default_state()
-    for _ in range(9):  # some rules bending, but random becomes predictable
+    for _ in range(9):  # some rules bending, but random becomes determined
         move = random_available_move(grid)
         set_cell(grid, move, CROSS)
 
@@ -123,7 +123,7 @@ def test_random_choice():
 
 
 def test_game_conductor1():
-    """One game simulation (others I don't want to write for now)"""
+    """One game simulation"""
     gc = GameConductor()
     handle1 = gc.get_handle(CROSS)
     handle2 = gc.get_handle()  # get zero that is left
@@ -156,7 +156,7 @@ def test_game_conductor1():
         handle2((2, 2))
 
     rendered_grid = "OXO\n_X_\n_X_"
-    assert str(gc) == rendered_grid
+    assert str(gc) == rendered_grid  # мне хорошо, я так чувствую
 
 
 def test_opposite_mark():
@@ -173,3 +173,11 @@ def test_get_mark():
     handle2 = gc.get_handle(CROSS, what_is_left=True)
     assert handle1.is_my_turn() is True
     assert handle2.is_my_turn() is False
+    assert handle1.mark == CROSS
+    assert handle2.mark == ZERO
+
+    handle1((0, 0))
+    assert handle1.is_my_turn() is False
+    assert handle2.is_my_turn() is True
+    assert handle1.mark == CROSS
+    assert handle2.mark == ZERO

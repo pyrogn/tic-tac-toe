@@ -36,6 +36,7 @@ from tic_tac_toe.game import (
     Grid,
     find_optimal_move,
     get_default_state,
+    get_opposite_mark,
     get_winner,
     is_move_legal,
     n_empty_cells,
@@ -153,7 +154,7 @@ async def start_multichoice(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         )
 
     # keep message to edit it later on in place
-    context.user_data["bot_message"] = message  # for singlplayer
+    context.user_data["bot_message"] = message  # for singleplayer
 
     if "user_name" not in context.user_data:
         context.user_data["user_name"] = get_full_user_name(update.message.from_user)
@@ -170,7 +171,7 @@ async def start_singleplayer(update: Update, context: ContextTypes.DEFAULT_TYPE)
         [
             InlineKeyboardButton(CROSS, callback_data="1"),
             InlineKeyboardButton(ZERO, callback_data="2"),
-            InlineKeyboardButton("🤪", callback_data="3"),
+            InlineKeyboardButton("🤪", callback_data="3"),  # random
         ]
     ]
     await query.edit_message_text(
@@ -181,7 +182,7 @@ async def start_singleplayer(update: Update, context: ContextTypes.DEFAULT_TYPE)
     user = context.user_data["user_name"]
     context.user_data["game"] = f"{user}-bot"
     context.user_data["active_singleplayer_game"] = True
-    logger.info(f"Player {user} want to start multiplayer game")
+    # logger.info(f"Player {user} want to start singleplayer game")
 
     return MARK_CHOICE
 
@@ -223,7 +224,10 @@ async def mark_choice(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not handle.is_my_turn():
         await bot_turn(update, context)
 
-    logger.info(f"game {context.user_data['game']} has begun, keyboard rendered")
+    logger_message = (
+        f"singleplayer game {context.user_data['game']} has begun, keyboard rendered"
+    )
+    logger.info(logger_message)
     return CONTINUE_GAME_SINGLEPLAYER
 
 
@@ -233,7 +237,9 @@ async def game_singleplayer(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     coords_keyboard = query.data
 
     move = int(coords_keyboard[0]), int(coords_keyboard[1])
-    logger.info(f"player chose move {move}")
+    # CONFUSED: как работать с логами? Надо все писать или менять уровень для
+    # обычных действий? или не писать рутинные действия?
+    # logger.info(f"player chose move {move}")
 
     handle = context.user_data["handle_player"]
 
@@ -241,7 +247,7 @@ async def game_singleplayer(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         handle(move)
     except InvalidMoveError as f:
         await query.answer(text=f"Illegal move: {str(f)}", show_alert=True)
-        logger.info("player tried to make illegal move")
+        # logger.info("player tried to make illegal move")
         return CONTINUE_GAME_SINGLEPLAYER
 
     gc: GameConductor = context.user_data["GameConductor"]
@@ -250,7 +256,7 @@ async def game_singleplayer(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     await query.edit_message_text(
         reply_markup=reply_markup, text=wide_message("Opponent's turn")
     )
-    logger.info(f"Player made move {move}, message rendered")
+    # logger.info(f"Player made move {move}, message rendered")
     await query.answer()
 
     if gc.is_game_over:
@@ -267,12 +273,12 @@ async def bot_turn(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     handle = context.user_data["handle_bot"]
     # move = random_available_move(grid) # 10 IQ bot
     move = find_optimal_move(grid, handle.mark)  # 210 IQ bot
-    logger.info(f"bot chose move {move}")
+    # logger.info(f"bot chose move {move}")
 
     assert is_move_legal(grid, move), "Bot move is illegal"
 
     handle(move)
-    logger.info(f"bot made move {move}")
+    # logger.info(f"bot made move {move}")
 
     # thinking simulation
     # first moves are slow by computations
@@ -287,7 +293,7 @@ async def bot_turn(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
         text=wide_message(r"*Your turn*", escape=True),
         parse_mode="MarkdownV2",
     )
-    logger.info(f"bot made move {move}, message rendered")
+    # logger.info(f"bot made move {move}, message rendered")
     gc: GameConductor = context.user_data["GameConductor"]
     if gc.is_game_over:
         del context.user_data["active_singleplayer_game"]
@@ -301,18 +307,28 @@ async def end_singleplayer(update: Update, context: ContextTypes.DEFAULT_TYPE) -
     """
 
     game_name = context.user_data["game"]
-    logger.info(f"{game_name} has ended")
+    # logger.info(f"{game_name} has ended")
     query = update.callback_query
 
     gc: GameConductor = context.user_data["GameConductor"]
     handle = context.user_data["handle_player"]
-    winner = get_winner(gc.grid) or "Дружба"
-    text = render_message_at_game_end(gc, handle.mark)
+    winner = get_winner(gc.grid)
+    mark_username_dict = {handle.mark: "Myself", get_opposite_mark(handle.mark): "Bot"}
+    text = render_message_at_game_end(gc, handle.mark, mark_username_dict)
     await query.answer()
     await query.edit_message_text(text=text)
 
     del context.user_data["bot_message"]  # since we don't touch this message any more
-    logger.info(f"{game_name} has ended, message rendered. winner: {winner}")
+
+    if winner:
+        winner = f"{mark_username_dict[winner]} ({winner})"
+    else:
+        winner = "Дружба"
+
+    logger_message = (
+        f"singleplayer game {game_name} has ended, message rendered. winner: {winner}"
+    )
+    logger.info(logger_message)
 
     await wanna_play_again(update, context)
 
@@ -327,7 +343,7 @@ async def start_multiplayer(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     await query.answer()
     user_name = context.user_data["user_name"]
 
-    logger.info(f"Player {user_name} has joined")
+    # logger.info(f"Player {user_name} has joined")
     chat_id = query.message.chat_id
     game = None
 
@@ -337,7 +353,7 @@ async def start_multiplayer(update: Update, context: ContextTypes.DEFAULT_TYPE) 
 
     if multiplayer.is_player_waiting:  # == I will be his opponent
         text = "Configuring the game for you, Sir"
-    else:
+    else:  # I am the first to join
         text = "Waiting for anyone to join"
 
     message_id = context.user_data["bot_message"].message_id
@@ -348,7 +364,7 @@ async def start_multiplayer(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     )
 
     # we check in /start command that player doesn't play in multiplayer right now
-    # so every exception must be developer's error
+    # so every exception must be a developer's error
     multiplayer.register_player(
         chat_id=chat_id, message_id=message_id, user_name=user_name
     )
@@ -381,8 +397,8 @@ async def start_multiplayer(update: Update, context: ContextTypes.DEFAULT_TYPE) 
             message_id=game.myself.message_id,
             reply_markup=reply_markup,
         )
-        logger_message += "Keyboards are rendered for players"
-        logger.info(logger_message)
+        # logger_message += "Keyboards are rendered for players"
+        # logger.info(logger_message)
 
     except NotEnoughPlayersError:
         logger_message = f"{user_name} is waiting for opponent to join"
@@ -399,29 +415,24 @@ async def game_multiplayer(update: Update, context: ContextTypes.DEFAULT_TYPE) -
     coords_keyboard = query.data
 
     move = int(coords_keyboard[0]), int(coords_keyboard[1])
-    logger.info(f"player chose move {move}")
+    # logger.info(f"player chose move {move}")
     chat_id = query.message.chat_id
 
     game = multiplayer.get_game(chat_id)
-    game_name = f"{game.myself.user_name} {game.opponent.user_name}"
-    logger.info(f"{game_name}: entered game coroutine")
+    # game_name = f"{game.myself.user_name} {game.opponent.user_name}"
 
     gc = game.game_conductor
     handle = game.myself.handle
-
-    if not handle.is_my_turn:
-        logger_message = game_name + ": Player attempted to make a move not in his time"
-        logger.info(logger_message)
 
     try:
         handle(move)
     except InvalidMoveError as f:
         await query.answer(text=f"Illegal move: {str(f)}", show_alert=True)
-        logger.info(f"{game_name}: player tried to make illegal move")
+        # logger.info(f"{game_name}: player tried to make illegal move")
         return CONTINUE_GAME_MULTIPLAYER
     await query.answer()
 
-    logger.info(f"Player made move {move}")
+    # logger.info(f"Player made move {move}")
 
     keyboard = generate_keyboard(gc.grid)
     reply_markup = InlineKeyboardMarkup(keyboard)
@@ -432,8 +443,8 @@ async def game_multiplayer(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         await end_multiplayer(context, game.opponent.chat_id, game.opponent.message_id)
         multiplayer.remove_game(chat_id)
 
-        logger_message = game_name + ": Game is ended, and removed"
-        logger.info(logger_message)
+        # logger_message = game_name + ": Game is ended, and removed"
+        # logger.info(logger_message)
 
         # send a new message for two players
         await wanna_play_again(
@@ -459,7 +470,7 @@ async def game_multiplayer(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         parse_mode="MarkdownV2",
         reply_markup=reply_markup,
     )
-    logger.info(f"Player made move {move}, messages rendered")
+    # logger.info(f"Player made move {move}, messages rendered")
 
     return CONTINUE_GAME_MULTIPLAYER
 
@@ -469,18 +480,24 @@ async def end_multiplayer(
     chat_id: ChatId,
     message_id: MessageId,
 ) -> None:
-    """Edit last message of 2 chats with grid as string and result."""
+    """Edit last message of 2 chats with grid as string and result of game."""
     game = multiplayer.get_game(chat_id)
     gc = game.game_conductor
     game_name = f"{game.myself.user_name} vs {game.opponent.user_name}"
 
-    text = render_message_at_game_end(gc, game.myself.mark)
+    mark_username_dict = {
+        game.myself.mark: game.myself.user_name,
+        game.opponent.mark: game.opponent.user_name,
+    }
+    text = render_message_at_game_end(gc, game.myself.mark, mark_username_dict)
     await context.bot.edit_message_text(
         text=text, chat_id=chat_id, message_id=message_id
     )
 
     winner = get_winner(gc.grid) or "Дружба"
-    logger_message = f"{game_name} has ended, message rendered. winner: {winner}"
+    logger_message = (
+        f"multiplayer game {game_name} has ended, message rendered. winner: {winner}"
+    )
     logger.info(logger_message)
 
 
@@ -601,8 +618,10 @@ def main() -> None:
             ],
         },
         fallbacks=[
-            # you might start over at any moment, dropping current game
+            # you might start over at any moment, dropping a current game
             CommandHandler("start", start_multichoice, block=False),
+            CommandHandler("rules", rules, block=False),
+            # But no option of emergency stop! - you shall play all day and night
         ],
         per_message=False,
         block=False,
@@ -616,4 +635,4 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    main()
+    main()  # looks very innocent
