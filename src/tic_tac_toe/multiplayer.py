@@ -1,9 +1,11 @@
 """Module with helpers for multiplayer game of Tic Tac Toe"""
+from collections.abc import Iterator
 from typing import NamedTuple, TypeAlias
 
 from tic_tac_toe.exceptions import (
     CurrentGameError,
     NotEnoughPlayersError,
+    TicTacToeException,
     WaitRoomError,
 )
 from tic_tac_toe.game import (
@@ -42,6 +44,52 @@ class GamePersonalized(NamedTuple):
     game_conductor: GameConductor
 
 
+class PlayersQueue:
+    """Queue for players waiting for multiplayer game."""
+
+    def __init__(self):
+        """One list for incoming players. Another - for outcoming."""
+        self.inlist = []
+        self.outlist = []
+
+    def enqueue(self, value) -> None:
+        self.inlist.append(value)
+
+    def dequeue(self) -> dict:
+        if not self.outlist:
+            while self.inlist:
+                self.outlist.append(self.inlist.pop())
+        return self.outlist.pop()
+
+    def union_queues(self) -> Iterator[dict]:
+        for player in self.inlist + self.outlist:
+            yield player
+
+    def __contains__(self, chat_id) -> bool:
+        for player in self.union_queues():
+            if chat_id == player["chat_id"]:
+                return True
+        return False
+
+    def remove(self, chat_id) -> None:
+        for queue in (self.inlist, self.outlist):
+            for idx, player in enumerate(queue):
+                if chat_id == player["chat_id"]:
+                    del queue[idx]
+                    return
+
+        raise TicTacToeException("No such player in queue")
+
+    def get(self, chat_id: ChatId) -> dict:
+        for player in self.union_queues():
+            if chat_id == player["chat_id"]:
+                return player
+        raise TicTacToeException("No such player in queue")
+
+    def __len__(self) -> int:
+        return len(list(self.union_queues()))
+
+
 class Multiplayer:
     """Connects two players, manages queue and games.
 
@@ -62,7 +110,7 @@ class Multiplayer:
     def __init__(self) -> None:
         # better and more efficient to be Queue, but it is harder to work with
         # anyway queue won't store more than 2 players
-        self.players_queue: list[dict] = []
+        self.players_queue = PlayersQueue()
         self.games: dict[ChatId, Game] = {}
 
     @property
@@ -85,7 +133,7 @@ class Multiplayer:
         if kwargs["chat_id"] in self.players_queue:
             raise WaitRoomError
 
-        self.players_queue.append(kwargs)
+        self.players_queue.enqueue(kwargs)
 
     def register_pair(self) -> None:
         """Try to make a pair from players in the queue and start a game.
@@ -94,8 +142,8 @@ class Multiplayer:
         """
         if len(self.players_queue) < 2:
             raise NotEnoughPlayersError("Not enough players")
-        player1_dict = self.players_queue.pop(0)
-        player2_dict = self.players_queue.pop(0)
+        player1_dict = self.players_queue.dequeue()
+        player2_dict = self.players_queue.dequeue()
 
         gc = GameConductor()
         # First joined player will get CROSS always
@@ -139,21 +187,12 @@ class Multiplayer:
     # a new class PlayerQueue with these methods
     def is_this_player_in_queue(self, chat_id: ChatId) -> bool:
         "Check if the player is already in the queue"
-        for player in self.players_queue:
-            if chat_id == player["chat_id"]:
-                return True
-        return False
+        return chat_id in self.players_queue
 
-    def remove_player_from_queue(self, chat_id: ChatId) -> bool:
+    def remove_player_from_queue(self, chat_id: ChatId) -> None:
         "Remove player from the queue"
-        for player in self.players_queue:
-            if player["chat_id"] == chat_id:
-                self.players_queue.remove(player)
-                return True
-        return False
+        self.players_queue.remove(chat_id)
 
     def get_player_from_queue(self, chat_id: ChatId) -> dict | None:
         """Get player info from the queue"""
-        for player in self.players_queue:
-            if player["chat_id"] == chat_id:
-                return player
+        return self.players_queue.get(chat_id)

@@ -10,7 +10,7 @@ from typing import Final
 from telegram import User
 from telegram.helpers import escape_markdown
 
-from tic_tac_toe.game import GameConductor, Mark, get_opposite_mark, get_winner
+from tic_tac_toe.game import Mark, TTTBoard, get_opposite_mark
 
 GAME_RULES: Final = inspect.cleandoc(
     r"""
@@ -44,8 +44,22 @@ def get_full_user_name(user: User) -> str:
     return user_name
 
 
+def parse_keyboard_move(data: str) -> tuple[int, int]:
+    if len(data) != 2:
+        raise ValueError(
+            f"length of data from inlinekeyboard should be 2, but it is {len(data)}"
+        )
+    elif not isinstance(data, str):
+        raise ValueError(f"Data has type {type(data)}, but str is required")
+    r, c = int(data[0]), int(data[1])
+    for dim in (r, c):
+        if not 0 <= dim <= 2:
+            raise ValueError(f"Some dimension in {r, c} not in range [0, 2]")
+    return r, c
+
+
 def render_message_at_game_end(
-    gc: GameConductor,
+    game_board: TTTBoard,
     mark: Mark,
     username_mark: dict[Mark, str],
 ) -> str:
@@ -56,7 +70,7 @@ def render_message_at_game_end(
         mark: mark of the player
         username_mark: dictionary with mark and user name to congratulate personally!
     """
-    winner = get_winner(gc.grid)
+    winner = game_board.get_winner()
     if winner:
         if winner == mark:
             first_line = "You won!"
@@ -68,11 +82,13 @@ def render_message_at_game_end(
             winner_username = username_mark[get_opposite_mark(mark)]
         winner = f"{winner_username} ({winner})"  # username + mark
     else:
-        winner = "Дружба 😻"
+        winner = (
+            "Дружба \N{Smiling Cat Face with Heart-Shaped Eyes}"  # это кот Леопольд
+        )
         emoji = "\N{Face with Finger Covering Closed Lips}"
         first_line = "It's a draw!"
 
-    rendered_grid = str(gc)
+    rendered_grid = str(game_board)
     text = (
         first_line
         + "\n"

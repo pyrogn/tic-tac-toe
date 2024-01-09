@@ -22,6 +22,7 @@ from telegram.warnings import PTBUserWarning
 from tic_tac_toe.bot_helpers import (
     GAME_RULES,
     get_full_user_name,
+    parse_keyboard_move,
     render_message_at_game_end,
     wide_message,
 )
@@ -35,11 +36,7 @@ from tic_tac_toe.game import (
     GameConductor,
     Grid,
     find_optimal_move,
-    get_default_state,
     get_opposite_mark,
-    get_winner,
-    is_move_legal,
-    n_empty_cells,
 )
 from tic_tac_toe.multiplayer import ChatId, MessageId, Multiplayer
 
@@ -202,14 +199,14 @@ async def mark_choice(update: Update, context: ContextTypes.DEFAULT_TYPE):
     else:  # unexpected error
         raise ValueError(f"Mark isn't identified: {mark_choice}") from None
 
-    keyboard = generate_keyboard(get_default_state())
-    reply_markup = InlineKeyboardMarkup(keyboard)
-
     gc = GameConductor()
     context.user_data["GameConductor"] = gc
     handle = gc.get_handle(mark)
     context.user_data["handle_player"] = handle
     context.user_data["handle_bot"] = gc.get_handle(what_is_left=True)
+
+    keyboard = generate_keyboard(gc.game_board.grid)
+    reply_markup = InlineKeyboardMarkup(keyboard)
 
     my_mark = handle.mark
     if context.user_data["handle_player"].is_my_turn():
@@ -234,9 +231,8 @@ async def mark_choice(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def game_singleplayer(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Main processing of the game"""
     query = update.callback_query
-    coords_keyboard = query.data
 
-    move = int(coords_keyboard[0]), int(coords_keyboard[1])
+    move = parse_keyboard_move(query.data)
     # CONFUSED: как работать с логами? Надо все писать или менять уровень для
     # обычных действий? или не писать рутинные действия?
     # logger.info(f"player chose move {move}")
@@ -251,7 +247,7 @@ async def game_singleplayer(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         return CONTINUE_GAME_SINGLEPLAYER
 
     gc: GameConductor = context.user_data["GameConductor"]
-    keyboard = generate_keyboard(gc.grid)
+    keyboard = generate_keyboard(gc.game_board.grid)
     reply_markup = InlineKeyboardMarkup(keyboard)
     await query.edit_message_text(
         reply_markup=reply_markup, text=wide_message("Opponent's turn")
@@ -269,24 +265,24 @@ async def bot_turn(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Bot makes a move in a singleplayer game."""
     query = update.callback_query
     gc = context.user_data["GameConductor"]
-    grid = gc.grid
+    grid = gc.game_board
     handle = context.user_data["handle_bot"]
     # move = random_available_move(grid) # 10 IQ bot
     move = find_optimal_move(grid, handle.mark)  # 210 IQ bot
     # logger.info(f"bot chose move {move}")
 
-    assert is_move_legal(grid, move), "Bot move is illegal"
+    assert grid.is_move_legal(move), f"Bot move {move} is illegal"
 
     handle(move)
     # logger.info(f"bot made move {move}")
 
     # thinking simulation
     # first moves are slow by computations
-    if n_empty_cells(gc.grid) < 8:
+    if gc.game_board.n_empty_cells() < 8:
         sec_sleep = random.randint(2, 5) / 10
         await asyncio.sleep(sec_sleep)
 
-    keyboard = generate_keyboard(gc.grid)
+    keyboard = generate_keyboard(gc.game_board.grid)
     reply_markup = InlineKeyboardMarkup(keyboard)
     await query.edit_message_text(
         reply_markup=reply_markup,
@@ -312,9 +308,9 @@ async def end_singleplayer(update: Update, context: ContextTypes.DEFAULT_TYPE) -
 
     gc: GameConductor = context.user_data["GameConductor"]
     handle = context.user_data["handle_player"]
-    winner = get_winner(gc.grid)
+    winner = gc.game_board.get_winner()
     mark_username_dict = {handle.mark: "Myself", get_opposite_mark(handle.mark): "Bot"}
-    text = render_message_at_game_end(gc, handle.mark, mark_username_dict)
+    text = render_message_at_game_end(gc.game_board, handle.mark, mark_username_dict)
     await query.answer()
     await query.edit_message_text(text=text)
 
@@ -336,8 +332,9 @@ async def end_singleplayer(update: Update, context: ContextTypes.DEFAULT_TYPE) -
 
 
 async def start_multiplayer(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """Start multiplayer game"""
-    # likely unsafe with race conditions, but this is another issue
+    """Start multiplayer game by registering a player and if there were a player
+    in the queue, register a pair of players and start a game.
+    """
 
     query = update.callback_query
     await query.answer()
@@ -346,10 +343,6 @@ async def start_multiplayer(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     # logger.info(f"Player {user_name} has joined")
     chat_id = query.message.chat_id
     game = None
-
-    keyboard_state = get_default_state()
-    keyboard = generate_keyboard(keyboard_state)
-    reply_markup = InlineKeyboardMarkup(keyboard)
 
     if multiplayer.is_player_waiting:  # == I will be his opponent
         text = "Configuring the game for you, Sir"
@@ -376,6 +369,8 @@ async def start_multiplayer(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         logger_message = f"Multiplayer game {game_name} is registered"
         logger.info(logger_message)
 
+        keyboard = generate_keyboard(game.game_conductor.game_board.grid)
+        reply_markup = InlineKeyboardMarkup(keyboard)
         await context.bot.edit_message_text(
             text=wide_message(
                 rf"*Make a move*\. Your opponent {game.myself.user_name} has joined\. "
@@ -412,9 +407,8 @@ async def game_multiplayer(update: Update, context: ContextTypes.DEFAULT_TYPE) -
     """Main processing of the multiplayer game"""
 
     query = update.callback_query
-    coords_keyboard = query.data
 
-    move = int(coords_keyboard[0]), int(coords_keyboard[1])
+    move = parse_keyboard_move(query.data)
     # logger.info(f"player chose move {move}")
     chat_id = query.message.chat_id
 
@@ -434,7 +428,7 @@ async def game_multiplayer(update: Update, context: ContextTypes.DEFAULT_TYPE) -
 
     # logger.info(f"Player made move {move}")
 
-    keyboard = generate_keyboard(gc.grid)
+    keyboard = generate_keyboard(gc.game_board.grid)
     reply_markup = InlineKeyboardMarkup(keyboard)
 
     if gc.is_game_over:
@@ -489,12 +483,14 @@ async def end_multiplayer(
         game.myself.mark: game.myself.user_name,
         game.opponent.mark: game.opponent.user_name,
     }
-    text = render_message_at_game_end(gc, game.myself.mark, mark_username_dict)
+    text = render_message_at_game_end(
+        gc.game_board, game.myself.mark, mark_username_dict
+    )
     await context.bot.edit_message_text(
         text=text, chat_id=chat_id, message_id=message_id
     )
 
-    winner = get_winner(gc.grid) or "Дружба"
+    winner = gc.game_board.get_winner() or "Дружба"
     logger_message = (
         f"multiplayer game {game_name} has ended, message rendered. winner: {winner}"
     )
@@ -542,7 +538,7 @@ async def wanna_play_again(
         )
 
 
-async def goodbuy_sir(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+async def goodbye_sir(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Print farewell and end conversation with user until new /start command."""
     query = update.callback_query
     await query.answer()
@@ -582,6 +578,13 @@ def main() -> None:
                 )
                 for i in (1, 2, 3)
             ],
+            CONTINUE_GAME_SINGLEPLAYER: [
+                CallbackQueryHandler(
+                    game_singleplayer, pattern="^" + f"{r}{c}" + "$", block=False
+                )
+                for r in range(3)
+                for c in range(3)
+            ],
             CONTINUE_GAME_MULTIPLAYER: [
                 *[
                     CallbackQueryHandler(
@@ -590,21 +593,14 @@ def main() -> None:
                     for r in range(3)
                     for c in range(3)
                 ],
-                CallbackQueryHandler(
+                CallbackQueryHandler(  # options in case of game over
                     start_multichoice,
                     pattern="^" + str(START_AGAIN_CALLBACK) + "$",
                     block=False,
                 ),
                 CallbackQueryHandler(
-                    goodbuy_sir, pattern="^" + str(GOODBYE_CALLBACK) + "$", block=False
+                    goodbye_sir, pattern="^" + str(GOODBYE_CALLBACK) + "$", block=False
                 ),
-            ],
-            CONTINUE_GAME_SINGLEPLAYER: [
-                CallbackQueryHandler(
-                    game_singleplayer, pattern="^" + f"{r}{c}" + "$", block=False
-                )
-                for r in range(3)
-                for c in range(3)
             ],
             PLAY_AGAIN: [
                 CallbackQueryHandler(
@@ -613,7 +609,7 @@ def main() -> None:
                     block=False,
                 ),
                 CallbackQueryHandler(
-                    goodbuy_sir, pattern="^" + str(GOODBYE_CALLBACK) + "$", block=False
+                    goodbye_sir, pattern="^" + str(GOODBYE_CALLBACK) + "$", block=False
                 ),
             ],
         },
@@ -635,4 +631,4 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    main()  # looks very innocent
+    main()
