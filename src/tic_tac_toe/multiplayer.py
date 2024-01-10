@@ -52,21 +52,24 @@ class PlayersQueue:
         self.inlist = []
         self.outlist = []
 
-    def enqueue(self, value) -> None:
+    def enqueue(self, value: dict) -> None:
+        """Add element to queue"""
+        assert "chat_id" in value and "message_id" in value
         self.inlist.append(value)
 
     def dequeue(self) -> dict:
+        """Pop first element from queue"""
         if not self.outlist:
             while self.inlist:
                 self.outlist.append(self.inlist.pop())
         return self.outlist.pop()
 
-    def union_queues(self) -> Iterator[dict]:
+    def _union_queues(self) -> Iterator[dict]:
         for player in self.inlist + self.outlist:
             yield player
 
     def __contains__(self, chat_id) -> bool:
-        for player in self.union_queues():
+        for player in self._union_queues():
             if chat_id == player["chat_id"]:
                 return True
         return False
@@ -81,13 +84,13 @@ class PlayersQueue:
         raise TicTacToeException("No such player in queue")
 
     def get(self, chat_id: ChatId) -> dict:
-        for player in self.union_queues():
+        for player in self._union_queues():
             if chat_id == player["chat_id"]:
                 return player
         raise TicTacToeException("No such player in queue")
 
     def __len__(self) -> int:
-        return len(list(self.union_queues()))
+        return len(list(self._union_queues()))
 
 
 class Multiplayer:
@@ -108,8 +111,6 @@ class Multiplayer:
     """
 
     def __init__(self) -> None:
-        # better and more efficient to be Queue, but it is harder to work with
-        # anyway queue won't store more than 2 players
         self.players_queue = PlayersQueue()
         self.games: dict[ChatId, Game] = {}
 
@@ -183,8 +184,6 @@ class Multiplayer:
             game.chat_dict[chat_id], game.chat_dict[other_chat_id], game.game_conductor
         )
 
-    # I don't know what to do with it, looks like a candidate for
-    # a new class PlayerQueue with these methods
     def is_this_player_in_queue(self, chat_id: ChatId) -> bool:
         "Check if the player is already in the queue"
         return chat_id in self.players_queue

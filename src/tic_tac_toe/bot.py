@@ -77,7 +77,7 @@ async def rules(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
 
 def generate_keyboard(state: Grid) -> list[list[InlineKeyboardButton]]:
-    """Generate tic tac toe keyboard 3x3 (telegram buttons)"""
+    """Generate tic tac toe keyboard 3x3 using InlineKeyboardButton"""
     return [
         [InlineKeyboardButton(state[r][c], callback_data=f"{r}{c}") for c in range(3)]
         for r in range(3)
@@ -87,7 +87,8 @@ def generate_keyboard(state: Grid) -> list[list[InlineKeyboardButton]]:
 async def start_multichoice(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Send message on `/start`.
 
-    User can choose singleplayer or multiplayer game mode
+    User can choose singleplayer or multiplayer game mode.
+    If there is an active game (single or multi), it is dropped.
     """
 
     keyboard = [
@@ -159,7 +160,9 @@ async def start_multichoice(update: Update, context: ContextTypes.DEFAULT_TYPE) 
 
 
 async def start_singleplayer(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """Start singleplayer game and ask user about mark choice using InlineKeyboard."""
+    """Start singleplayer game and ask user about mark choice using InlineKeyboard.
+
+    Then we are moving to mark selection (X or O)"""
 
     query = update.callback_query
     await query.answer()
@@ -185,7 +188,11 @@ async def start_singleplayer(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
 
 async def mark_choice(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Process mark choice from user in singleplayer game and show InlineKeyboard"""
+    """Process mark choice from user in singleplayer game
+
+    and show InlineKeyboard to start a game.
+    If player is O, then player waits till a bot makes a move and updates keyboard.
+    """
     query = update.callback_query
     await query.answer()
 
@@ -229,7 +236,12 @@ async def mark_choice(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def game_singleplayer(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """Main processing of the game"""
+    """Main processing of the singleplayer game.
+
+    After player's choice we give execution control to bot_turn async function.
+    If game is ended after player's or bot's turn, then print results and ask about
+    next game.
+    """
     query = update.callback_query
 
     move = parse_keyboard_move(query.data)
@@ -278,7 +290,7 @@ async def bot_turn(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
 
     # thinking simulation
     # first moves are slow by computations
-    if gc.game_board.n_empty_cells() < 8:
+    if gc.game_board.n_empty_cells() < 8:  # (condition is a candidate for removal)
         sec_sleep = random.randint(2, 5) / 10
         await asyncio.sleep(sec_sleep)
 
@@ -298,9 +310,7 @@ async def bot_turn(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
 
 
 async def end_singleplayer(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """Returns `ConversationHandler.END`, which tells the
-    ConversationHandler that the conversation is over.
-    """
+    """Send a result and ask a player about next game."""
 
     game_name = context.user_data["game"]
     # logger.info(f"{game_name} has ended")
@@ -404,7 +414,12 @@ async def start_multiplayer(update: Update, context: ContextTypes.DEFAULT_TYPE) 
 
 
 async def game_multiplayer(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """Main processing of the multiplayer game"""
+    """Process a move in a multiplayer game.
+
+    If a move is valid, then update game state for two players.
+    If this move ends the game, then send (edit) result to players and ask
+    about next game
+    """
 
     query = update.callback_query
 
@@ -505,8 +520,9 @@ async def wanna_play_again(
     """Present to user InlineKeyboard with choice to start a new game.
 
     Arguments:
-        chats_multiplayers: if None, then make a reply in current conversation
-            if not None, then send messages to these chat ids
+        chats_multiplayers:
+            if None, then make a reply in current conversation (singlplayer)
+            if not None, then send messages to these chat ids (multiplayer)
     """
     keyboard = [
         [

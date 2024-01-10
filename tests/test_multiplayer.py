@@ -1,7 +1,30 @@
 """Tests for multiplayer helpers"""
 import pytest
 from tic_tac_toe.exceptions import NotEnoughPlayersError
-from tic_tac_toe.multiplayer import GamePersonalized, Multiplayer
+from tic_tac_toe.multiplayer import Game, GamePersonalized, Multiplayer, PlayersQueue
+
+
+def test_players_queue():
+    """Test players queue"""
+    queue = PlayersQueue()
+    for elem in range(0, 100):  # queue elems
+        queue.enqueue({"chat_id": elem, "message_id": elem * 1000})
+
+    assert len(queue) == 100
+    for elem in range(0, 100):  # dequeue all elems
+        pop_elem = queue.dequeue()
+        assert pop_elem["chat_id"] == elem
+        assert pop_elem["message_id"] == elem * 1000
+
+    queue.enqueue({"chat_id": -1, "message_id": -1})
+
+    assert -1 in queue
+    assert len(queue) == 1
+    elem = queue.get(-1)
+    assert elem["chat_id"] == -1 and elem["message_id"] == -1
+    assert len(queue) == 1
+    queue.remove(-1)
+    assert len(queue) == 0
 
 
 def test_startup_multiplayer():
@@ -22,7 +45,8 @@ def test_startup_multiplayer():
     assert len(multiplayer.players_queue) == 0
     assert len(multiplayer.games) == 2  # two link to one game
     assert multiplayer.games[1] == multiplayer.games[2]  # same game
-    assert isinstance(multiplayer.get_game(1), GamePersonalized)
+    assert isinstance(multiplayer.games[1], Game)  # for debug
+    assert isinstance(multiplayer.get_game(1), GamePersonalized)  # will be used
     assert isinstance(multiplayer.get_game(2), GamePersonalized)
 
     # make sure that they do share same data, but in different attributes
