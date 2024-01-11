@@ -36,6 +36,13 @@ Your options:
 - `maturin develop --release` (release flag for speed)
 - run the app `TIC_TAC_TOE_TOKEN_TG=token app` (entry point) or `python -m tic_tac_toe.bot`
 
+## Develop
+- Install `pdm`
+- `pdm install` in addition to above commands to have all necessary dependencies for developement
+- `python -m experiments.benchmark_minimax` for running benchmark on Python vs Rust minimax implementation
+- `pre-commit install` for setting up git hooks
+
+
 ## Flow diagram of `ConversationHandler`
 
 This diagram is a bit confusing to me, but it is better than nothing.
