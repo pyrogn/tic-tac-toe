@@ -28,11 +28,13 @@ Your options:
    4. From beginning until the game over bot edits the same message to create an impression of animation, even in different stages (select game, select mark, game start, game result).
 4. Bot will edit message with current game if you decide to start abruptly a new game using command `/start`. This way chat is cleaner and there are fewer ways to screw things up.
 
-## How to run
+## How to run (TODO edit and reproduce)
 
 - clone the repository
+- You should have installed `rust` and `maturin`
 - `pip install .`
-- `TIC_TAC_TOE_TOKEN_TG=token app` (entry point) or `python -m tic_tac_toe.bot`
+- `maturin develop --release`
+- run the app `TIC_TAC_TOE_TOKEN_TG=token app` (entry point) or `python -m tic_tac_toe.bot`
 - TODO: what is the option for rust version?
 
 ## Flow diagram of `ConversationHandler`

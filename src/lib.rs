@@ -138,7 +138,7 @@ fn minimax_move_score(grid: &mut Grid, mark: Mark, max_score: i32, depth: u8) ->
 }
 
 #[pyfunction]
-fn find_optimal_move(mut grid: Grid, mark: Mark) -> Move {
+fn find_optimal_move_rs(mut grid: Grid, mark: Mark) -> Move {
     let mut best_score = -200;
     let mut play_move: Move = [100, 100];
     for r in 0..TOTAL_ROWS {
@@ -157,9 +157,11 @@ fn find_optimal_move(mut grid: Grid, mark: Mark) -> Move {
     }
     return play_move;
 }
+
 #[pymodule]
+#[pyo3(name = "tic_tac_toe")]
 fn rs_minimax(_py: Python, m: &PyModule) -> PyResult<()> {
-    m.add_function(wrap_pyfunction!(find_optimal_move, m)?)?;
+    m.add_function(wrap_pyfunction!(find_optimal_move_rs, m)?)?;
     // m.add_function(wrap_pyfunction!(ai_best_move, m)?)?;
     Ok(())
 }

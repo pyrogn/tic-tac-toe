@@ -165,3 +165,6 @@ rs_minimax/.github/workflows/CI.yml
 rs_minimax/src/rewrite
 rs_minimax/lib
 rs_minimax/src/lib
+rust/lib
+src/rewrite
+src/lib

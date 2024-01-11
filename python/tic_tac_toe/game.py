@@ -221,8 +221,10 @@ def get_opposite_mark(mark: Mark) -> Mark:
     return ZERO if mark == CROSS else CROSS
 
 
+# I am thinking about creating interface (using Protocol) for bots
+# and different implementations (random, py, rust) should comply with it
 def random_available_move(grid: Grid, mark: Mark | None = None) -> Move:
-    "Get random move from available cells"
+    "Get random move from available cells. Mark is not used."
     game_board = TTTBoard(grid)  # to match Rust implementation
     if game_board.n_empty_cells() == 0:
         raise ValueError("No empty cells")

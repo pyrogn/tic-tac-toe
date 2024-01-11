@@ -5,7 +5,7 @@ edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 [lib]
-name = "rs_minimax"
+name = "tic_tac_toe"
 crate-type = ["cdylib"]
 
 [dependencies]

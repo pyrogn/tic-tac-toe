@@ -1,5 +1,5 @@
 [project]
-name = "tic-tac-toe"
+name = "tic_tac_toe"
 version = "0.1.0"
 description = "Default template for PDM package"
 authors = [
@@ -7,12 +7,18 @@ authors = [
 ]
 dependencies = [
     "python-telegram-bot>=20.7",
-    "maturin>=1.4.0",
     "numpy>=1.26.3",
+    "maturin>=1.4.0",
 ]
 requires-python = ">=3.12"
 readme = "README.md"
 license = {text = "MIT"}
+classifiers = [
+    "Programming Language :: Rust",
+    "Programming Language :: Python :: Implementation :: CPython",
+    "Programming Language :: Python :: Implementation :: PyPy",
+]
+dynamic = ["version"]
 
 [project.scripts]
 app = "tic_tac_toe.bot:main"
@@ -30,10 +36,15 @@ lint = [
 dev = [
     "pip>=23.3.2",
 ]
-[build-system]
-requires = ["setuptools>=61", "wheel"]
-build-backend = "setuptools.build_meta"
 
+[build-system]
+requires = ["maturin>=1.4,<2.0"]
+build-backend = "maturin"
+
+
+[tool.maturin]
+features = ["pyo3/extension-module"]
+python-source = "python"
 
 [tool.pdm]
 package-type = "application"
@@ -115,6 +126,3 @@ docstring-code-format = false
 # This only has an effect when the `docstring-code-format` setting is
 # enabled.
 docstring-code-line-length = "dynamic"
-
-[tool.maturin]
-module-name = "my_project._my_project"

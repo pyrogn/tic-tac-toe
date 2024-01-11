@@ -1,13 +1,14 @@
 """Script to validate that
 - Rust Minimax is unbeatable
 - On par with Python Minimax
-- Faster than Python (around 5 times difference)
+- Faster than Python (order of magnitude - hundreds (WOW!))
 """
 import functools
 import time
 from collections import defaultdict
 
 import numpy as np
+from tic_tac_toe import find_optimal_move_rs
 from tic_tac_toe.game import (
     CROSS,
     ZERO,
@@ -16,8 +17,6 @@ from tic_tac_toe.game import (
     find_optimal_move,
     random_available_move,
 )
-
-from rs_minimax import find_optimal_move as find_optimal_move_rs  # type: ignore
 
 
 # comprare rust with random bot
@@ -160,9 +159,9 @@ def arr_to_ms(arr):
     return [round(elem * 1_000, 1) for elem in arr]
 
 
-print(f"avg Py speeds from 1 move: {arr_to_ms(py_speed)}")
-print(f"avg Rs speeds from 1 move: {arr_to_ms(rs_speed)}")
+print(f"avg Py speeds from 1 to 9 move: {arr_to_ms(py_speed)}")
+print(f"avg Rs speeds from 1 to 9 move: {arr_to_ms(rs_speed)}")
 print(f"diff in speed (times): {diff_times}")
 
-# При данных условиях реализация на Rust быстрее в 5 раз в самом начале,
-# потом разница уменьшается до 1.5 раз
+# При данных условиях реализация на Rust быстрее в 150 раз в самом начале,
+# потом разница уменьшается до десяти примерно
