@@ -19,6 +19,7 @@ from telegram.ext import (
 )
 from telegram.warnings import PTBUserWarning
 
+from tic_tac_toe import find_optimal_move_rs
 from tic_tac_toe.bot_helpers import (
     GAME_RULES,
     get_full_user_name,
@@ -35,7 +36,6 @@ from tic_tac_toe.game import (
     ZERO,
     GameConductor,
     Grid,
-    find_optimal_move,
     get_opposite_mark,
 )
 from tic_tac_toe.multiplayer import ChatId, MessageId, Multiplayer
@@ -277,22 +277,23 @@ async def bot_turn(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Bot makes a move in a singleplayer game."""
     query = update.callback_query
     gc = context.user_data["GameConductor"]
-    grid = gc.game_board
+    board = gc.game_board
     handle = context.user_data["handle_bot"]
-    # move = random_available_move(grid) # 10 IQ bot
-    move = find_optimal_move(grid, handle.mark)  # 210 IQ bot
+
+    # move = random_available_move(board.grid) # 10 IQ bot
+    # move = find_optimal_move(board.grid, handle.mark)  # 210 IQ bot
+    move = find_optimal_move_rs(board.grid, handle.mark)  # 210 IQ, but in Rust
+
     # logger.info(f"bot chose move {move}")
 
-    assert grid.is_move_legal(move), f"Bot move {move} is illegal"
+    assert board.is_move_legal(move), f"Bot move {move} is illegal"
 
     handle(move)
     # logger.info(f"bot made move {move}")
 
     # thinking simulation
-    # first moves are slow by computations
-    if gc.game_board.n_empty_cells() < 8:  # (condition is a candidate for removal)
-        sec_sleep = random.randint(2, 5) / 10
-        await asyncio.sleep(sec_sleep)
+    sec_sleep = random.randint(2, 5) / 10
+    await asyncio.sleep(sec_sleep)
 
     keyboard = generate_keyboard(gc.game_board.grid)
     reply_markup = InlineKeyboardMarkup(keyboard)

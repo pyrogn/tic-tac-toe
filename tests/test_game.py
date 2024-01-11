@@ -114,7 +114,7 @@ def test_moves(board1, board2):
 def test_random_choice():
     board = TTTBoard()
     for _ in range(9):  # some rules bending, but random becomes determined
-        move = random_available_move(board)
+        move = random_available_move(board.grid)
         board.set_cell(move, CROSS)
 
     assert board.n_empty_cells() == 0
@@ -122,7 +122,7 @@ def test_random_choice():
     assert board.get_winner() == CROSS
 
     with pytest.raises(ValueError, match="No empty cells"):
-        random_available_move(board)
+        random_available_move(board.grid)
 
 
 def test_game_conductor1():
