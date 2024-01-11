@@ -159,8 +159,8 @@ def arr_to_ms(arr):
     return [round(elem * 1_000, 1) for elem in arr]
 
 
-print(f"avg Py speeds from 1 to 9 move: {arr_to_ms(py_speed)}")
-print(f"avg Rs speeds from 1 to 9 move: {arr_to_ms(rs_speed)}")
+print(f"avg Py speeds (ms) from 1 to 9 move: {arr_to_ms(py_speed)}")
+print(f"avg Rs speeds (ms) from 1 to 9 move: {arr_to_ms(rs_speed)}")
 print(f"diff in speed (times): {diff_times}")
 
 # При данных условиях реализация на Rust быстрее в 150 раз в самом начале,

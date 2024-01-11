@@ -244,9 +244,8 @@ def _minimax_move_score(game_board: TTTBoard, mark: Mark, max_score: int) -> int
         winner = game_board.get_winner()
         if not winner:  # draw
             return 0
-        if winner == mark:  # win
+        if winner == mark:  # win (should never happen)
             return 10
-        # lose (would never happen, because you cannot lose after making a move)
         return -10
 
     best_score = -200
