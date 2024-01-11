@@ -160,7 +160,7 @@ fn find_optimal_move_rs(mut grid: Grid, mark: Mark) -> Move {
 
 #[pymodule]
 #[pyo3(name = "tic_tac_toe")]
-fn rs_minimax(_py: Python, m: &PyModule) -> PyResult<()> {
+fn tic_tac_toe(_py: Python, m: &PyModule) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(find_optimal_move_rs, m)?)?;
     // m.add_function(wrap_pyfunction!(ai_best_move, m)?)?;
     Ok(())

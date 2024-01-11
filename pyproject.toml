@@ -50,7 +50,7 @@ python-source = "python"
 package-type = "application"
 
 [tool.ruff]
-include = ["pyproject.toml", "src/**/*.py", "tests/**/*.py", "experiments/**/*.py"]
+include = ["pyproject.toml", "python/**/*.py", "tests/**/*.py", "experiments/**/*.py"]
 # Exclude a variety of commonly ignored directories.
 exclude = [
     ".bzr",
