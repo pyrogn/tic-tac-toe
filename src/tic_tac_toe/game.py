@@ -221,8 +221,9 @@ def get_opposite_mark(mark: Mark) -> Mark:
     return ZERO if mark == CROSS else CROSS
 
 
-def random_available_move(game_board: TTTBoard) -> Move:
+def random_available_move(grid: Grid, mark: Mark | None = None) -> Move:
     "Get random move from available cells"
+    game_board = TTTBoard(grid)  # to match Rust implementation
     if game_board.n_empty_cells() == 0:
         raise ValueError("No empty cells")
 
@@ -263,11 +264,11 @@ def _minimax_move_score(game_board: TTTBoard, mark: Mark, max_score: int) -> int
     return best_score
 
 
-def find_optimal_move(game_board: TTTBoard, mark: Mark) -> Move:
-    """Get optimal move based on minimax strategy"""
+def find_optimal_move(grid: Grid, mark: Mark) -> Move:
+    """Get optimal move based on minimax strategy."""
     # if move hasn't changed, we are in trouble, but it shouln't happen
     best_score, move = -200, (100, 100)
-    game_board = deepcopy(game_board)
+    game_board = TTTBoard(grid)  # to match Rust implementation
     for r in range(3):
         for c in range(3):
             if game_board.grid[r][c] == FREE_SPACE:

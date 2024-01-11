@@ -277,13 +277,13 @@ async def bot_turn(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Bot makes a move in a singleplayer game."""
     query = update.callback_query
     gc = context.user_data["GameConductor"]
-    grid = gc.game_board
+    board = gc.game_board
     handle = context.user_data["handle_bot"]
-    # move = random_available_move(grid) # 10 IQ bot
-    move = find_optimal_move(grid, handle.mark)  # 210 IQ bot
+    # move = random_available_move(board.grid) # 10 IQ bot
+    move = find_optimal_move(board.grid, handle.mark)  # 210 IQ bot
     # logger.info(f"bot chose move {move}")
 
-    assert grid.is_move_legal(move), f"Bot move {move} is illegal"
+    assert board.is_move_legal(move), f"Bot move {move} is illegal"
 
     handle(move)
     # logger.info(f"bot made move {move}")
