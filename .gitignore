@@ -162,3 +162,6 @@ cython_debug/
 #.idea/
 .DS_Store
 rs_minimax/.github/workflows/CI.yml
+rs_minimax/src/rewrite
+rs_minimax/lib
+rs_minimax/src/lib

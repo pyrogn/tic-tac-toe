@@ -25,7 +25,11 @@ DEFAULT_STATE = [[FREE_SPACE for _ in range(3)] for _ in range(3)]
 
 
 class TTTBoard:
-    """Game board for 3x3 Tic-Tac-Toe"""
+    """Game board for 3x3 Tic-Tac-Toe.
+
+    Main purpose: define game rules for the board and marks.
+    Does not check if player made a move not in his turn.
+    """
 
     def __init__(self, grid: Grid | None = None) -> None:
         self.grid: Grid = grid or self.get_start_grid()
@@ -70,11 +74,10 @@ class TTTBoard:
 
     def get_winner(self) -> Mark | None:
         """Find a winner and return it. If None, returns None"""
-        winner = set()
         for mark in (CROSS, ZERO):
             for row in range(3):  # horizontal
                 if all([i == mark for i in self.grid[row]]):
-                    winner.add(mark)
+                    return mark
             for column in range(3):  # vertical
                 if all(
                     [
@@ -83,16 +86,12 @@ class TTTBoard:
                         for elem in self.grid[row][column]
                     ]
                 ):
-                    winner.add(mark)
+                    return mark
             if all([self.grid[i][i] == mark for i in range(3)]):  # left diagonal
-                winner.add(mark)
+                return mark
             if all([self.grid[i][2 - i] == mark for i in range(3)]):  # right diagonal
-                winner.add(mark)
-        if len(winner) == 0:
-            return None  # draw or game is not over
-        if len(winner) > 1:
-            raise GameRulesError("Two winners, this is nonsense")
-        return list(winner)[0]
+                return mark
+        return None
 
     def __str__(self) -> str:
         """Render grid in some readable string"""
@@ -142,10 +141,15 @@ class HandleForPlayer:
 
 
 class GameConductor:
-    """Game engine for tic tac toe"""
+    """Game engine for tic tac toe.
+
+    Used mainly for correct alternation of game moves.
+    It gives a handle for each player to play without worries by pulling it.
+    HandleForPlayer disallows illegal moves.
+    """
 
     def __init__(self):
-        self.game_board: TTTBoard = TTTBoard()
+        self.game_board: TTTBoard = TTTBoard()  # validates correctness of game board
         self._available_marks: set[Mark] = {CROSS, ZERO}
         self.current_move: Mark = CROSS  # first move (my game rule)
         self.is_game_over: bool = False
@@ -197,7 +201,7 @@ class GameConductor:
         return self.game_board.get_winner()
 
     def full_handle(self, move: Move, mark: Mark) -> None:
-        """Might raise exception if the move is illegal"""
+        """Handle with options to make a move and a mark. Used for HandleForPlayer."""
         if self.is_game_over:
             raise GameRulesError("Game has ended, no more moves!")
         if self.current_move != mark:
@@ -239,7 +243,8 @@ def _minimax_move_score(game_board: TTTBoard, mark: Mark, max_score: int) -> int
             return 0
         if winner == mark:  # win
             return 10
-        return -10  # lose
+        # lose (would never happen, because you cannot lose after making a move)
+        return -10
 
     best_score = -200
     for r in range(3):

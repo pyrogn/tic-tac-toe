@@ -33,6 +33,7 @@ Your options:
 - clone the repository
 - `pip install .`
 - `TIC_TAC_TOE_TOKEN_TG=token app` (entry point) or `python -m tic_tac_toe.bot`
+- TODO: what is the option for rust version?
 
 ## Flow diagram of `ConversationHandler`
 
@@ -50,6 +51,7 @@ States of ConversationHandler aren't shown, but hopefully they are not so far aw
 - Multiplayer is way harder than singleplayer, and they don't share much functionality.
 - Writing tests for your abstractions makes you believe in them and lets you write more assertive code.
 - black, ruff, autoimport relieve unnecessary mental burden. Vim doesn't work in Russian layout, therefore all text is in English.
+- Integration of Rust code into Python using Maturin, PyO3
 
 ## TODO
 
