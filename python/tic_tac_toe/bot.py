@@ -189,7 +189,6 @@ async def start_singleplayer(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
 async def mark_choice(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Process mark choice from user in singleplayer game
-
     and show InlineKeyboard to start a game.
     If player is O, then player waits till a bot makes a move and updates keyboard.
     """
@@ -345,6 +344,9 @@ async def end_singleplayer(update: Update, context: ContextTypes.DEFAULT_TYPE) -
 async def start_multiplayer(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Start multiplayer game by registering a player and if there were a player
     in the queue, register a pair of players and start a game.
+
+    I thought a bit and believe that this implementation doesn't suffer
+    from race conditions (non-zero probability of misjudgement).
     """
 
     query = update.callback_query
@@ -355,17 +357,7 @@ async def start_multiplayer(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     chat_id = query.message.chat_id
     game = None
 
-    if multiplayer.is_player_waiting:  # == I will be his opponent
-        text = "Configuring the game for you, Sir"
-    else:  # I am the first to join
-        text = "Waiting for anyone to join"
-
     message_id = context.user_data["bot_message"].message_id
-    await context.bot.edit_message_text(
-        chat_id=chat_id,
-        message_id=message_id,
-        text=wide_message(text),
-    )
 
     # we check in /start command that player doesn't play in multiplayer right now
     # so every exception must be a developer's error
@@ -407,6 +399,14 @@ async def start_multiplayer(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         # logger.info(logger_message)
 
     except NotEnoughPlayersError:
+        # If not enough players, print a message
+        # otherwise you would immediately see a board and wait for an opponent
+        await context.bot.edit_message_text(
+            chat_id=chat_id,
+            message_id=message_id,
+            text=wide_message("Waiting for anyone to join"),
+        )
+
         logger_message = f"{user_name} is waiting for opponent to join"
         logger.info(logger_message)
         return CONTINUE_GAME_MULTIPLAYER
