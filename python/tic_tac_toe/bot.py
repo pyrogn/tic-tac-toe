@@ -287,12 +287,17 @@ async def bot_turn(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
 
     assert board.is_move_legal(move), f"Bot move {move} is illegal"
 
-    handle(move)
-    # logger.info(f"bot made move {move}")
-
     # thinking simulation
     sec_sleep = random.randint(2, 5) / 10
     await asyncio.sleep(sec_sleep)
+
+    handle(move)
+    # logger.info(f"bot made move {move}")
+
+    gc: GameConductor = context.user_data["GameConductor"]
+    if gc.is_game_over:
+        del context.user_data["active_singleplayer_game"]
+        return await end_singleplayer(update, context)
 
     keyboard = generate_keyboard(gc.game_board.grid)
     reply_markup = InlineKeyboardMarkup(keyboard)
@@ -302,10 +307,6 @@ async def bot_turn(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
         parse_mode="MarkdownV2",
     )
     # logger.info(f"bot made move {move}, message rendered")
-    gc: GameConductor = context.user_data["GameConductor"]
-    if gc.is_game_over:
-        del context.user_data["active_singleplayer_game"]
-        return await end_singleplayer(update, context)
     return CONTINUE_GAME_SINGLEPLAYER
 
 
