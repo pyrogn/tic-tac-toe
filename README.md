@@ -31,9 +31,9 @@ Your options:
 ## How to run
 
 - clone the repository
-- You should have installed `cargo` and `maturin` 🦀
+- You should have installed `cargo` 🦀
 - cd into repository
-- `maturin develop --release` (release flag for speed)
+- `make init`
 - run the app `TIC_TAC_TOE_TOKEN_TG=token app` (entry point) or `python -m tic_tac_toe.bot`
 
 ## Develop
